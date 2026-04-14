@@ -3,7 +3,7 @@ title: "Magic Data Set"
 author: "Eli C and Evan D"
 format: pdf
 ---
-
+[View this project on GitHub] (https://github.com/evandonch-arch/STAT408-MTGFinalProject.git)
 # Project Team
 
 The project team consists of Eli Crowder and Evan Donch.

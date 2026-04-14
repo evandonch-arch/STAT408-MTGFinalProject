@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Magic Card Analysis
 
 This project analyzes Magic: The Gathering card data using Quarto.
@@ -11,3 +12,4 @@ Open `magicproject.qmd` and click Render.
 
 ## Data
 Pulled from the Scryfall API.
+
