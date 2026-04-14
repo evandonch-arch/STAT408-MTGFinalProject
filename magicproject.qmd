@@ -1,0 +1,138 @@
+---
+title: "Magic Data Set"
+author: "Eli C and Evan D"
+format: pdf
+---
+
+# Project Team
+
+The project team consists of Eli Crowder and Evan Donch.
+
+# The Dataset
+
+Our plan so far is to work with a dataset that includes all the cards in a popular TCG called Magic: The Gathering.
+
+The dataset for this project comes from Scryfall, a comprehensive database of MTG cards. The data are accessed using Scryfall’s bulk data API, which provides regularly updated information on all Magic cards. The dataset includes information such as card names, mana costs, types, colors, rarity, legality across formats, and market prices.
+
+These data represent characteristics of individual Magic cards and are widely used by players, collectors, and analysts to understand trends in gameplay and card value.
+
+# Project Idea
+
+The goal of this project is to analyze relationships between card characteristics (such as mana cost, color identity, and rarity) and their market prices. Additionally, we plan to explore trends in card legality across formats (such as Commander or Modern) and investigate what factors may influence whether a card is widely used or valuable. 
+
+
+```{r}
+#| include: false
+library(tidyverse)
+library(jsonlite)
+```
+
+# Load Data
+
+```{r}
+bulk_info <- fromJSON("https://api.scryfall.com/bulk-data")
+download_url <- bulk_info$data$download_uri[
+  bulk_info$data$type == "default_cards"
+]
+
+mtg_small <- fromJSON(download_url, flatten = TRUE) |>
+  as_tibble() |>
+  select(
+    oracle_id,
+    name,
+    mana_cost,
+    cmc,
+    type_line,
+    oracle_text,
+    colors,
+    color_identity,
+    set,
+    rarity,
+    prices.usd,
+    legalities.standard,
+    legalities.modern,
+    legalities.commander
+  )
+
+mtg_clean <- mtg_small |>
+  mutate(price = as.numeric(prices.usd)) |>
+  filter(!is.na(price))
+
+mtg_cheapest <- mtg_clean |>
+  group_by(oracle_id) |>
+  slice_min(price, with_ties = FALSE) |>
+  ungroup()
+
+```
+
+# Initial Exploration
+
+```{r}
+print(dim(mtg_small))
+n_distinct(mtg_small$oracle_id)
+print(dim(mtg_cheapest))
+
+print(names(mtg_small))
+
+head(mtg_small$name, 10)
+```
+
+### Price Distribution
+
+```{r}
+mtg_small |>
+  mutate(price = as.numeric(prices.usd)) |>
+  filter(!is.na(price)) |>
+  ggplot(aes(price)) + 
+  geom_histogram(bins = 50) + 
+  labs(
+    title = "Distribution of Card Prices (USD)",
+    x = "Price (USD)",
+    y = "Count"
+  )
+```
+
+This graph shows the vast majority of cards are barely above 0 dollars, but cards exist that are priced way higher. 
+
+### Average Price for a Card
+
+```{r}
+mtg_cheapest |>
+  summarize(avg_price = round(mean(price, na.rm = TRUE), 2))
+```
+
+### Most Expensive Card(s)
+
+```{r}
+mtg_cheapest %>%
+  filter(price == max(price, na.rm = TRUE)) |>
+  select(name, price)
+```
+### Cheapest Card(s)
+
+```{r}
+mtg_cheapest %>%
+  filter(price == min(price, na.rm = TRUE)) |>
+  select(name, price)
+```
+
+
+### Average Price by Rarity
+
+```{r}
+mtg_small |>
+  filter(rarity != "bonus") |>
+  mutate(price = as.numeric(prices.usd)) |>
+  group_by(rarity) |>
+  summarize(avg_price = mean(price, na.rm = TRUE)) |>
+  mutate(
+    rarity = factor(
+      rarity, 
+      levels = c("common", "uncommon", "rare", "mythic", "special"))) |>
+  ggplot(aes(rarity, avg_price)) +
+  geom_col() +
+  labs(title = "Average Card Price by Rarity")
+```
+
+This graph shows that "mythic" cards are generally the highest priced. 
+
