@@ -3,6 +3,10 @@ title: "Magic Data Set"
 author: "Eli C and Evan D"
 format: pdf
 ---
+<<<<<<< HEAD
+=======
+GitHub Link: https://github.com/evandonch-arch/STAT408-MTGFinalProject.git
+>>>>>>> 41d5b3ec1d7529f725da4caf5eda0d3a7e3ba06e
 
 # Project Team
 
@@ -35,9 +39,13 @@ download_url <- bulk_info$data$download_uri[
   bulk_info$data$type == "default_cards"
 ]
 
+<<<<<<< HEAD
 download.file(download_url, "mtg_cards.json", mode = "wb")
 
 mtg_small <- fromJSON("mtg_cards.json", flatten = TRUE) |>
+=======
+mtg_small <- fromJSON(download_url, flatten = TRUE) |>
+>>>>>>> 41d5b3ec1d7529f725da4caf5eda0d3a7e3ba06e
   as_tibble() |>
   select(
     oracle_id,
