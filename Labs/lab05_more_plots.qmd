@@ -1,0 +1,234 @@
+---
+title: "STAT 408 Lab 5: More plots"
+author: Eli Crowder
+format:
+  pdf:
+    geometry:
+      - inner=3cm
+      - outer=4cm
+      - top=1cm
+      - bottom=4cm
+embed-resources: true
+---
+
+*Instructions:* Add your name to the YAML header as the author of this lab. Fill in this template document with your text and code answers, making sure not to delete the `\newpage` commands. When you submit this assignment, for each problem, **mark all pages** that contain the instructions and/or your work/results for that problem. Please set YAML code execution options when appropriate in the header or in individual code chunks; just don't change the existing ones.
+
+
+# Exam 1 Follow-up
+
+Problems 1-2 are an extension of Exam 1. Pair up with another person you didn't already collaborate with during Exam 1. Code up and try running both your own and your partner's final code from Exam 1, Part 2, Phase 3. If it doesn't work as intended, troubleshoot together until it works. Problems 1-2 are the same, but Problem 1 is for your code and Problem 2 is for your partner's code. For each problem:
+
+- Show the code from Exam 1, Part 2, Phase 3 in a code chunk in your submitted lab document. Use code chunk options to prevent the code from running when you render to pdf, since it may have one or more errors in it.
+- Write a text summary in answer to the following: does the code work as written? If not, what do you have to do to get it working (computing the requested summary statistics and reproducing the plot shown in the exam)?
+- Provide another code chunk with an updated version of the code that works. Let this code run in your pdf and show the results in your report.
+
+```{r}
+#| echo: false
+
+# this code creates the dataset you worked with in Exam 1, Part 2
+cities = data.frame(
+  state = c(rep("Montana", 4), 
+            rep("Idaho", 3), 
+            rep("Washington", 3)),
+  city = c("Missoula", "Billings", "Bozeman", "Helena",
+           "Boise", "Idaho Falls", "Twin Falls",
+           "Seattle", "Spokane", "Olympia"),
+  pop = c(80, 120, 60, 35, # population in thousands of people
+          235, 70, 55,
+          800, 230, 56),
+  elev = c(3209, 3212, 4795, 4058, # elevation in ft
+           2850, 4705, 3740,
+           180, 1843, 95)
+)
+```
+
+```{r}
+#| include: false
+library(tidyverse)
+```
+
+
+### Problem 1: your code
+
+```{r}
+# your code from Exam 1, Part 2, Phase 3
+library(tidyverse)
+
+cities2 <- cities |>
+  group_by(state) |>
+  mutate(total_pop = sum(pop),
+         avg_pop = mean(elev*0.3048))
+
+ggplot(cities2, 
+       mapping = aes(x = state, y = total_pop)) +
+  geom_bar(stat = "identity") +
+  labs(x = "State", y = "Population (thousands)")
+```
+
+Instead of using mutate we need to use summarize. We could also change the variable name to something that makes more sense like "states" but not necessary. 
+
+```{r}
+# your updated working version of your code
+library(tidyverse)
+
+cities2 <- cities |>
+  group_by(state) |>
+  summarize(total_pop = sum(pop),
+         avg_pop = mean(elev*0.3048))
+
+ggplot(cities2, 
+       mapping = aes(x = state, y = total_pop)) +
+  geom_bar(stat = "identity") +
+  labs(x = "State", y = "Population (thousands)")
+```
+
+
+
+
+
+
+\newpage
+
+### Problem 2: your partner's code
+
+```{r}
+#| eval: false
+library(tidyverse)
+state_pop_elev = cities |>
+  group_by(state) |>
+  summarise(total_pop = sum(pop)) |>
+  summarize(avg_met_elev = mean(elev * 0.3048))
+
+ggplot(state_pop_elev,
+       aes(x = state, y = total_pop)) +
+  geom_bar(stat = "identity") +
+  labs(x = "State", y = "Population (thousands)")
+  
+```
+
+The first summarise() removes the elev variable from the dataset, so the second summarise() cannot compute mean(elev * 0.3048). Combining both calculations into a single summarise() keeps elev available during computation. 
+
+```{r}
+# your updated working version of their code
+library(tidyverse)
+state_pop_elev = cities |>
+  group_by(state) |>
+  summarise(total_pop = sum(pop), 
+            avg_met_elev = mean(elev * 0.3048))
+
+ggplot(state_pop_elev,
+       aes(x = state, y = total_pop)) +
+  geom_bar(stat = "identity") +
+  labs(x = "State", y = "Population (thousands)")
+```
+
+
+
+
+
+
+\newpage
+
+# R4DS2e, Chapter 9
+
+Read and work through Sections 9.1-9.4, then work on these problems for your lab. You might also like checking out [this additional reference](https://www.cedricscherer.com/2019/08/05/a-ggplot2-tutorial-for-beautiful-plotting-in-r/) for some things such as [faceting (making multi-panel plots)](https://www.cedricscherer.com/2019/08/05/a-ggplot2-tutorial-for-beautiful-plotting-in-r/#panels).
+
+### Problem 3
+
+Using the `mpg` dataset, create a scatterplot of `hwy` vs. `displ` where the points are pink filled-in triangles. Show your code and the resulting plot.
+
+```{r}
+ggplot(mpg, 
+       mapping = aes(x = hwy, y = displ)) +
+  geom_point(shape = 17, color = "pink")
+```
+
+Then create a scatterplot of `hwy` vs. `displ` where the points are all filled-in squares but the color is a function of fuel type. Show your code and the resulting plot.
+
+```{r}
+ggplot(mpg, 
+       mapping = aes(x = hwy, y = displ, color = fl)) +
+  geom_point(shape = 15)
+```
+
+
+
+
+
+
+\newpage
+
+### Problem 4
+
+Why did the following code not result in a plot with blue points? Fix the code and show both the updated code and the resulting plot.
+
+```{r}
+#| eval: false
+
+ggplot(mpg) + 
+  geom_point(aes(x = displ, y = hwy, color = "blue"))
+```
+
+The code does not produce blue points because "blue" is placed inside aes(), which maps variables to aesthetics rather than setting fixed values. As a result, ggplot treats "blue" as a categorical value and assigns a default color instead of using the color blue. 
+
+```{r}
+# your updated code
+ggplot(mpg) + 
+  geom_point(aes(x = displ, y = hwy), color = "blue")
+```
+
+
+
+
+
+\newpage
+
+### Problem 5
+
+Run the following code and look at the differences among the resulting plots. Summarize for yourself in text (a) how you can tell when to use `drv ~ .` versus `. ~ drv` in `facet_grid` if you facet by just one variable called `drv`, and (b) how to tell which variable to type first when you facet by two variables. (This problem does not require you to provide additional code or results, just a text summary of the differences.)
+
+```{r}
+#| eval: false
+
+ggplot(mpg) + 
+  geom_point(aes(x = displ, y = hwy)) +
+  facet_grid(drv ~ .)
+
+ggplot(mpg) + 
+  geom_point(aes(x = displ, y = hwy)) +
+  facet_grid(. ~ drv)
+
+ggplot(mpg) + 
+  geom_point(aes(x = displ, y = hwy)) +
+  facet_grid(cyl ~ drv)
+
+ggplot(mpg) + 
+  geom_point(aes(x = displ, y = hwy)) +
+  facet_grid(drv ~ cyl)
+```
+
+When you are using the `facet_grid` function, the first variable is rows (on the right y axis) and the second is columns (on the top x axis). If any variable is replaced by a period, there is just nothing on that axis.  
+
+
+
+
+\newpage
+
+### Problem 6
+
+Why are some of the facets in the plot below empty? (Provide your answer in text.)
+
+```{r}
+#| eval: false
+
+# why are some facets in this plot empty?
+ggplot(mpg, aes(x = displ, y = hwy)) + 
+  geom_point() + 
+  facet_grid(drv ~ cyl, scales = "free")
+
+# hint: you can try this code too and see if it sheds some light
+ggplot(mpg) + 
+  geom_point(aes(x = drv, y = cyl))
+```
+
+Adding `scales = "free"` to the `facet_grid` function allows the scales across each axis to vary but stay constant for each grid. Some facets are empty because not every combination actually exists in the dataset.

@@ -1,0 +1,240 @@
+---
+title: "Exam 2"
+author: "Eli Crowder"
+date: April 2 2026
+format: pdf
+---
+# Results
+
+```{r}
+#| include: false
+library(tidyverse)
+library(knitr)
+```
+
+```{r}
+#| echo: false
+rivers <- read_csv("Labs/Data/rivers.csv", show_col_types = FALSE) %>%
+  mutate(
+    date = as.Date(date, format = "%m/%d/%Y"),
+    river = case_when(
+      site %in% c("Gallatin", "Galatin", "Gallatiin") ~ "Gallatin",
+      site %in% c("Madison", "Madison River") ~ "Madison",
+      site %in% c("Missouri", "Misouri") ~ "Missouri",
+      site %in% c("Yellowstone") ~ "Yellowstone",
+      TRUE ~ site
+    ),
+    river = factor(river, levels = c("Gallatin", "Madison", "Missouri", "Yellowstone")),
+    temp = as.numeric(temperature),
+    do = as.numeric(dissolved_oxygen),
+    ph = as.numeric(pH),
+    month = as.numeric(format(date, "%m"))
+  )
+```
+
+
+```{r}
+#| echo: false
+#| results: asis
+avg_table <- rivers %>%
+  group_by(river) %>%
+  summarize(
+    avg_temp = mean(temp, na.rm = TRUE),
+    avg_do = mean(do, na.rm = TRUE),
+    avg_ph = mean(ph, na.rm = TRUE)
+  )
+
+knitr::kable(
+  avg_table,
+  digits = 2,
+  col.names = c("River", "Average Temperature", "Average Dissolved Oxygen", "Average pH")
+)
+```
+
+## Table
+
+The table shows the average temperature, dissolved oxygen, and pH for each of the four rivers: Gallatin, Madison, Missouri, and Yellowstone. To create this table, I first cleaned the dataset by converting the date column to a proper date format using as.Date() and making sure the measurement variables were numeric. I also noticed that the river names were inconsistent (for example, “Madison River” and misspellings of “Gallatin” and “Missouri”), so I used case_when() to standardize all site names into the correct four rivers.
+
+After cleaning the data, I used group_by(river) and summarize() to calculate the mean temperature, dissolved oxygen, and pH for each river. I then displayed the table using kable() and formatted the values to two decimal places.
+
+From the table, the Gallatin River has the highest average temperature at about 22.35°F, while the Madison River has the lowest at about 21.39°F. The Missouri River has the highest average dissolved oxygen (8.30), while the Gallatin River has the lowest (7.99). The pH values are very similar across all rivers, ranging from about 7.10 to 7.17, indicating relatively neutral water conditions. Overall, the rivers have fairly similar water quality, but there are small differences in temperature and oxygen levels.
+
+```{r}
+#| echo: false
+plot1_data <- rivers %>%
+  filter(temp > 25) %>%
+  count(river, name = "count") %>%
+  complete(
+    river = factor(c("Gallatin", "Madison", "Missouri", "Yellowstone"),
+                   levels = c("Gallatin", "Madison", "Missouri", "Yellowstone")),
+    fill = list(count = 0)
+  )
+
+ggplot(plot1_data, aes(x = river, y = count, fill = river)) +
+  geom_col() +
+  labs(
+    title = "Number of Temperature Observations Above 25°F",
+    x = "River",
+    y = "Number of Observations"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+## Plot 1: Temperature Above 25°F
+
+The first bar chart shows the number of times the temperature exceeded 25°F at each river. To create this plot, I filtered the dataset using filter(temp > 25) and then counted the number of observations for each river using count(river). I also used complete() to ensure that all four rivers appear in the plot, even if one of them had zero exceedances.
+
+The plot shows that the Gallatin River has the highest number of observations above 25°F, with 6 occurrences. The Yellowstone River has 4 exceedances, and the Missouri River has 2. The Madison River has 0 observations above 25°F, which is why its bar is not visible or is very small.
+
+This suggests that the Gallatin River experiences higher temperatures more frequently than the others, while the Madison River tends to stay cooler. I also improved the plot by adding a descriptive title and axis labels and removing the legend since the river names are already shown on the x-axis.
+
+```{r}
+#| echo: false
+wqs <- read_csv("Labs/Data/wqs.csv", show_col_types = FALSE) %>%
+  mutate(
+    river = case_when(
+  site %in% c("Gallatin", "Galatin", "Gallatiin") ~ "Gallatin",
+  site %in% c("Madison", "Madison River") ~ "Madison",
+  site %in% c("Missouri", "Misouri") ~ "Missouri",
+  site %in% c("Yellowstone") ~ "Yellowstone",
+  TRUE ~ site
+),
+river = factor(river, levels = c("Gallatin", "Madison", "Missouri", "Yellowstone")),
+    river = as.factor(site),
+    month = as.numeric(month),
+    standard = as.numeric(standard)
+  )
+```
+
+```{r}
+#| echo: false
+combined <- rivers %>%
+  left_join(wqs, by = c("river", "month"))
+
+plot2_data <- combined %>%
+  filter(temp > standard) %>%
+  count(river, name = "count") %>%
+  complete(
+    river = factor(c("Gallatin", "Madison", "Missouri", "Yellowstone"),
+                   levels = c("Gallatin", "Madison", "Missouri", "Yellowstone")),
+    fill = list(count = 0)
+  )
+
+ggplot(plot2_data, aes(x = river, y = count, fill = river)) +
+  geom_col() +
+  labs(
+    title = "Number of Temperature Exceedances of Water Quality Standards",
+    x = "River",
+    y = "Number of Exceedances"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+## Plot 2: Exceedances of Water Quality Standards
+
+The second bar chart shows how often temperatures exceeded the water quality standards for each river. The water quality dataset only included the month rather than full dates, so I created a month variable in the rivers dataset using format(date, "%m"). I then joined the two datasets using left_join() on both river and month so that each temperature observation could be compared to the correct seasonal standard.
+
+After joining the data, I filtered for cases where temp > standard and counted exceedances for each river. Again, I used complete() to ensure all four rivers appeared in the plot.
+
+The plot shows that the Yellowstone River has the most exceedances (5), followed by the Gallatin River (4), and the Missouri River (1). The Madison River again has 0 exceedances. Compared to Plot 1, this chart provides a more meaningful comparison because it accounts for different standards across months.
+
+This indicates that the Yellowstone River is most frequently exceeding acceptable temperature limits, which could be a concern for aquatic life. The Madison River appears to consistently stay below both the fixed threshold and the seasonal standards.
+
+# Code
+
+```{r}
+#| eval: false
+
+library(tidyverse)
+library(knitr)
+
+rivers <- read_csv("Labs/Data/rivers.csv", show_col_types = FALSE) %>%
+  mutate(
+    date = as.Date(date, format = "%m/%d/%Y"),
+    river = case_when(
+      site %in% c("Gallatin", "Galatin", "Gallatiin") ~ "Gallatin",
+      site %in% c("Madison", "Madison River") ~ "Madison",
+      site %in% c("Missouri", "Misouri") ~ "Missouri",
+      site %in% c("Yellowstone") ~ "Yellowstone",
+      TRUE ~ site
+    ),
+    river = factor(river, levels = c("Gallatin", "Madison", "Missouri", "Yellowstone")),
+    temp = as.numeric(temperature),
+    do = as.numeric(dissolved_oxygen),
+    ph = as.numeric(pH),
+    month = as.numeric(format(date, "%m"))
+  )
+
+wqs <- read_csv("Labs/Data/wqs.csv", show_col_types = FALSE) %>%
+  mutate(
+    river = case_when(
+      site %in% c("Gallatin", "Galatin", "Gallatiin") ~ "Gallatin",
+      site %in% c("Madison", "Madison River") ~ "Madison",
+      site %in% c("Missouri", "Misouri") ~ "Missouri",
+      site %in% c("Yellowstone") ~ "Yellowstone",
+      TRUE ~ site
+    ),
+    river = factor(river, levels = c("Gallatin", "Madison", "Missouri", "Yellowstone")),
+    month = as.numeric(month),
+    standard = as.numeric(standard)
+  )
+
+avg_table <- rivers %>%
+  group_by(river) %>%
+  summarize(
+    avg_temp = mean(temp, na.rm = TRUE),
+    avg_do = mean(do, na.rm = TRUE),
+    avg_ph = mean(ph, na.rm = TRUE)
+  )
+
+knitr::kable(
+  avg_table,
+  digits = 2,
+  col.names = c("River", "Average Temperature", "Average Dissolved Oxygen", "Average pH")
+)
+
+plot1_data <- rivers %>%
+  filter(temp > 25) %>%
+  count(river, name = "count") %>%
+  complete(
+    river = factor(c("Gallatin", "Madison", "Missouri", "Yellowstone"),
+                   levels = c("Gallatin", "Madison", "Missouri", "Yellowstone")),
+    fill = list(count = 0)
+  )
+
+ggplot(plot1_data, aes(x = river, y = count, fill = river)) +
+  geom_col() +
+  labs(
+    title = "Number of Temperature Observations Above 25°F",
+    x = "River",
+    y = "Number of Observations"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+combined <- rivers %>%
+  left_join(wqs, by = c("river", "month"))
+
+plot2_data <- combined %>%
+  filter(temp > standard) %>%
+  count(river, name = "count") %>%
+  complete(
+    river = factor(c("Gallatin", "Madison", "Missouri", "Yellowstone"),
+                   levels = c("Gallatin", "Madison", "Missouri", "Yellowstone")),
+    fill = list(count = 0)
+  )
+
+ggplot(plot2_data, aes(x = river, y = count, fill = river)) +
+  geom_col() +
+  labs(
+    title = "Number of Temperature Exceedances of Water Quality Standards",
+    x = "River",
+    y = "Number of Exceedances"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+

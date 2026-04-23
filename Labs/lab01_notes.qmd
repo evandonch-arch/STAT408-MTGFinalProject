@@ -1,0 +1,198 @@
+---
+title: "lab01_notes"
+toc: true
+format:
+  html:
+    code-overflow: wrap
+  pdf:
+    keep-tex: true
+    include-in-header: 
+      text: |
+        \usepackage{fvextra}
+        \DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,commandchars=\\\{\}}
+        \DefineVerbatimEnvironment{OutputCode}{Verbatim}{breaklines,commandchars=\\\{\}}
+execute:
+  class-output: OutputCode
+embed-resources: true
+---
+
+## R versus R Studio
+
+R is the language, and R Studio is a visual point-and-click-and-type interface for working with R. (There are other ways to code in R than using R Studio.) We call R Studio a *graphical user interface (GUI)* or *integrated development environment (IDE)*.
+
+It's important to keep in mind that you can have multiple "sessions" or "instances" of R running. We'll talk more about this today and later in this course.
+
+
+
+## Set up an R Project for this class
+
+How do you usually/currently organize your files for courses? pros/cons?
+
+Make an R Project for this class and call it **STAT408** or **STAT_408**.
+
+Tip: don't name files and folders with spaces and special characters in them. Even if your computer can handle it, not all software you interact with (including uploading and downloading from the web) handles spaces and special characters well.
+
+Make subfolders called **Homework**, **Labs**, and **Slides**. Download the lecture slides from Canvas and put them in **Slides**. If you prefer, you can make a folder for slide pdfs and another for slide html files, or you can just put them both in the same **Slides** folder, or you can just download the file format you prefer and put it in the **Slides** folder.
+
+Download the lab Quarto template (**lab01_ggplot.qmd**) and put it in the **Labs** folder.
+
+Quit R Studio.
+
+Whenever you want to open R Studio to work on stuff for this class, open up Finder (on Mac) or File Explorer (on Windows) or whatever file manager you have on your computer, navigate to your **STAT408** or **STAT_408** folder, and double-click the **STAT408.RProj** or **STAT_408.RProj** file in that folder.
+
+Some advantages of R Projects:
+
+- Have multiple R sessions running in separate windows at the same time: one for STAT 408, say, and one for your research project, and another for another class you're in, and so on.
+- Return to the files you were last working on for that project/class when you open the R Project
+- R Studio will automatically use the folder of that R Project as its default location ("working directory", more about this as we proceed in this class)
+
+
+
+## Installing packages we'll use
+
+*Packages* are bundles of code and data. To use a package, you need to *install* it and then *load* it.
+
+Installing packages with `install.package()` is like buying a spatula and bringing it back to your kitchen. Loading a package with `library()` is like taking the spatula out of your drawer so you can cook with it. You only need to buy it once, but every time you're going to cook with it, you need to take it out of the drawer.
+
+```{r}
+#| eval: false
+
+install.packages("tidyverse") # to install it on your computer; do this step just once
+library(tidyverse) # to load tidyverse in a specific R session so you can use it
+```
+
+You can also install multiple packages at once. Let's try this out with two other packages we'll use today:
+
+```{r}
+#| eval: false
+
+install.packages(c("palmerpenguins", "ggthemes"))
+```
+
+Type and run your own code here to install the package **tinytex**, which allows you to render (create) pdf files from your Quarto documents.
+
+```{r}
+#| eval: false
+
+# install.packages("tinytex")
+```
+
+To test whether **tinytex** is working for you, try rendering **lab01_ggplot.qmd**.
+
+To submit most labs and other coding assignments in this class, you'll render your Quarto doc as a pdf and upload just the pdf to Gradescope.
+
+
+
+## Overview of the data analysis workflow
+
+See <https://r4ds.hadley.nz/intro.html>. I'll call the text R for Data Science, 2nd ed, "R4DS2e" for short.
+
+
+
+## Intro to `ggplot`
+
+We're going to work through [Chapter 1 of R4DS2e](https://r4ds.hadley.nz/data-visualize.html) but with some modifications. Do your work for this part of the lab in the **lab01_ggplot.qmd** file, since you will be submitting that at the end of class.
+
+We're going to work through [Chapter 2 of R4DS2e](https://r4ds.hadley.nz/workflow-basics.html) but with some modifications.
+
+To start, write (and then run) code here to load **tidyverse**, **palmerpenguins**, and **ggthemes**: (do NOT install them again, just load them)
+
+```{r}
+
+```
+
+Loading **palmerpenguins** also loads the datasets that come with it, so you now have access to the **penguins** dataset. You can take a look at it by typing its name in the console and hitting enter, or by running the following line:
+
+```{r}
+#| eval: false
+
+penguins
+```
+
+Some other handy commands:
+
+```{r}
+#| eval: false
+
+names(penguins) # see the variables in the dataset
+head(penguins) # shows you the first 6 rows; what do you think the function to show you the last 6 rows is called? try it out
+nrow(penguins) # how many rows (observations) are there?
+ncol(penguins) # how many columns (variables)?
+dim(penguins) # nrow x ncol; dim = dimensions
+```
+
+Read or skim Section 1.2.1 of R4DS2e Chapter 1. Try out the `glimpse` command and try `?penguins` to take a look at the help info on this dataset.
+
+Read Section 1.2.2, then before you continue with R4DS2e, run the following code chunk, which I'll call **Code chunk 1** for future reference in this lab: (you'll get a warning, but don't worry about it for now, we'll come back to that)
+
+```{r}
+#| eval: false
+
+# Code chunk 1
+ggplot(
+  data = penguins,
+  mapping = aes(x = flipper_length_mm, y = body_mass_g)
+) +
+  geom_point()
+```
+
+Suppose you are given some code like this and you want to understand what each part does. A good place to start is to run parts of it and see what you get. But you can't just start and stop anywhere; you have to figure out the basic structure so you can snip the code at a logical place so the code will run.
+
+The basic structure of the code above is as follows: (Note: this "code" will not run because it's not complete code. We call this *pseudocode*. It's like a code outline or a rough sketch.)
+
+```{r}
+#| eval: false
+
+ggplot(
+  data = ...,
+  mapping = ...
+) +
+  geom_point()
+```
+
+We can see more clearly now that the code above start with a function called `ggplot()`, and we're giving it two *arguments* or inputs called `data` and `mapping`. Then we *continue* the command with a `+` after the `ggplot()` function. The `+` operator tells R that there is more code coming. Then after the `+` we have the function `geom_point()`. We don't yet know exactly what each of these functions does, but this is a start.
+
+An even more abbreviated pseudocode without the arguments emphasizes that we're running two functions:
+
+```{r}
+#| eval: false
+
+ggplot() + geom_point()
+```
+
+So coming back to our idea of trying out parts of the code, go through Section 1.2.3 which will step you through parts of this code. Run the code in Section 1.2.3 yourself to follow along with what the text talks about. Remember, code is not a spectator sport; code along with tutorials and lessons.
+
+Next, before you move on to Section 1.2.4, try this code (I'll call it **Code chunk 2**) and see what happens:
+
+```{r}
+#| eval: false
+
+# Code chunk 2
+ggplot(
+  data = penguins,
+  mapping = aes(x = flipper_length_mm, y = body_mass_g)
+)
+  geom_point()
+```
+
+How do the results and output you get here compare to what you got from **Code chunk 1** (see where I labelled it above)?
+
+Carefully compare the code in **Code chunk 2** to **Code chunk 1**. What is the subtle difference in the code? Why do you think this difference gave you the results you got from **Code chunk 2**?
+
+Now read and work through Section 1.2.4, and then complete the exercises in **lab01_ggplot.qmd**. Make sure to change the author name at the top of the **lab01_ggplot.qmd** file to your name!
+
+
+## Options if you finish early
+
+Choose your own adventure:
+
+- Try the skills from this lab on another dataset called `mpg`.
+- Make up some problems for your labmates to solve, and write up the solutions.
+- Work through the rest of R4DS2e Chapter 1.
+- Work through R4DS2e Chapter 2 (Workflow basics).
+- Check out R4DS2e Chapter 28 (Quarto).
+
+
+
+
+

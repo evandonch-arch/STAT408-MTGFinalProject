@@ -1,0 +1,204 @@
+---
+title: "STAT 408 Lab 7: Logicals"
+format: pdf
+editor: visual
+author: Evan Donch & Eli Crowder
+---
+
+```{r}
+#| include: false
+library(tidyverse)
+```
+
+## Problem 1: Read in the survey data
+
+```{r}
+#| echo: true
+#| message: false
+#| warning: false
+#| results: hide
+survey = read_csv("Labs/STAT 408 Lab 7 Sports Survey.csv")
+
+# rename variables to short and better names
+survey = survey |>
+  rename(
+  timestamp = Timestamp,
+    fav_sport = `What's your favorite sport?`,
+    greatest_athlete = `Who's the greatest athlete of all time and why?`,
+    n_sports_played = `How many sports have you played?`,
+    fav_team = `What is your favorite sports team?`,
+    sports_impact = `How much do sports (watching and/or playing) effect your life?`,
+    sports_drink = `What is the best sports drink?`,
+    avg_miles = `How many miles on average do you think a soccer player runs in one game?`,
+  fav_num = `What's your favorite jersey number? (please enter an integer)`
+  )
+
+# Ensure numeric variables are numeric / integers
+survey = survey |>
+  mutate(
+    avg_miles = as.numeric(avg_miles),
+    fav_num = as.integer(fav_num)
+  )
+
+```
+
+The data was read in with appropriate renaming with clarity and consistency. The data types were set to match the survey design. NAs seem to be set as NAs so there is no need to convert them.
+
+## Problem 2: Explore the survey data
+
+-   Which variables have a limited set of fixed possible answers?
+
+```{r}
+#| echo: true
+#| results: hide
+# Favorite sport
+survey |>
+  count(fav_sport) |>
+  mutate(prop = n / sum(n)) |>
+  arrange(desc(n))
+
+# Favorite team
+survey |>
+  count(fav_team) |>
+  mutate(prop = n / sum(n)) |>
+  arrange(desc(n))
+
+# Sports impact
+survey |>
+  count(sports_impact) |>
+  mutate(prop = n / sum(n)) |>
+  arrange(desc(n))
+
+# Sports drink
+survey |>
+  count(sports_drink) |>
+  mutate(prop = n / sum(n)) |>
+  arrange(desc(n))
+
+# number of sports played
+survey |>
+  count(n_sports_played) |>
+  mutate(prop = n / sum(n)) |>
+  arrange(desc(n))
+```
+
+Favorite sport: Soccer is the most common (3 responses = 13.6%). Several sports are tied at 2 responses (9.1%). There are also a few one-off entries and some inconsistent capitalization (e.g., “Skiing” vs “skiing”, “Rock climbing” vs “climbing”).
+
+Favorite team: This question has a lot of missing responses (7 = 31.8%). All non-missing teams were unique (each 1 = 4.55%).
+
+Sports impact: Most people said sports are a major part of their life (8 = 36.4%). Next most common is “Little to none” (5 = 22.7%).
+
+Sports drink: Most common answer is Gatorade (4 = 18.2%), but there are also 4 missing (18.2%) and a bunch of unique answers.
+
+Number of sports played: Most respondents selected “4+” (13 = 59.1%), then “3” (7 = 31.8%).
+
+-   Which variables are numeric? Comment on the distributions of these variables: are they spread out or concentrated around a particular value, are there multiple modes/common values, are there outliers?
+
+The only numeric variable is avg_miles.
+
+```{r}
+#| echo: true
+summary(survey["avg_miles"])
+```
+
+The variable avg_miles is centered around 6-7 miles with a median of 6.35 and a mean of 7.39. The interquartile range suggests most responses are fairly concentrated in this range. However, the maximum value of 25 miles is much larger than the rest of the distribution and likely represents and outlier. There are 2 missing responses.
+
+-   How much data is missing?
+
+```{r}
+#| echo: true
+missing_table = tibble(
+  variable = names(survey),
+  n_missing = sapply(survey, function(x) sum(is.na(x)))
+) |>
+  mutate(prop_missing = n_missing / nrow(survey)) |>
+  arrange(desc(n_missing))
+
+missing_table
+```
+
+This table shows the number and proportion of missing responses for each question. The most missing variables are fav_team and sports_drink.
+
+-   Are there any outliers?
+
+```{r}
+#| echo: true
+#| results: hide
+# avg_miles extremes
+survey |> 
+  filter(!is.na(avg_miles)) |>
+  arrange(desc(avg_miles)) |>
+  select(avg_miles) |>
+  slice_head(n = 5)
+
+survey |> 
+  filter(!is.na(avg_miles)) |>
+  arrange(avg_miles) |>
+  select(avg_miles) |>
+  slice_head(n = 5)
+```
+
+For avg_miles, most responses are between about 5 and 8 miles (based on the quartiles), but the maximum value of 25 miles is much larger than the rest of the distribution and appears to be an outlier and possibly an incorrect entry.
+
+## Problem 3: Manipulate the data
+
+-   Create a true or false column
+
+```{r}
+#| echo: true
+#| results: hide
+# add a column with avg_miles > 7
+survey = survey |>
+  mutate(high_miles = avg_miles > 7)
+
+survey |>
+  count(high_miles) |>
+  mutate(prop = n / sum(n))
+```
+
+high_miles is TRUE if a respondent thinks a soccer player runs more than 7 miles in a game, and FALSE otherwise.
+
+-   Condense values that mean the same thing
+
+```{r}
+#| echo: true
+# fix cap issues along with shorter names for climbing and extra words
+survey = survey |>
+  mutate(
+    fav_sport_clean = case_when(
+      str_detect(str_to_lower(fav_sport), "ski") ~ "Skiing",
+      str_detect(str_to_lower(fav_sport), "climb") ~ "Climbing",
+      str_detect(str_to_lower(fav_sport), "baseball") ~ "Baseball",
+      TRUE ~ str_to_title(fav_sport)
+    )
+  )
+# clean results
+survey |>
+  count(fav_sport_clean) |>
+  arrange(desc(n))
+```
+
+The variable fav_sport_clean standardizes responses by correcting capitalization differences (e.g., “skiing” vs “Skiing”) and combining similar responses (e.g., “climbing” and “Rock climbing” into “Climbing”, and “Baseball. Its theraputic” into “Baseball”).
+
+-   New column that equals at least four different possible values depending on one or more other columns
+
+```{r}
+#| echo: true
+survey = survey |>
+  mutate(
+    miles_category = case_when(
+      is.na(avg_miles) ~ "Missing",
+      avg_miles < 5 ~ "Low (Under 5)",
+      avg_miles >= 5 & avg_miles < 7 ~ "Moderate (5–7)",
+      avg_miles >= 7 & avg_miles < 10 ~ "High (7–10)",
+      avg_miles >= 10 ~ "Very High (10+)"
+    )
+  )
+# output
+survey |>
+  count(miles_category) |>
+  mutate(prop = n / sum(n)) |>
+  arrange(desc(n))
+```
+
+GThe variable miles_category classifies respondents into five groups based on their estimate of average miles run in a soccer game: Low (under 5), Moderate (5–7), High (7–10), Very High (10+), and Missing. This condenses the numeric variable into meaningful categorical levels for easier comparison.

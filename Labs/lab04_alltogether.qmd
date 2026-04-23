@@ -1,0 +1,89 @@
+---
+title: "STAT 408 Lab 4: Putting it all together"
+author: "Eli Crowder"
+format: pdf
+---
+
+```{r}
+#| include: false
+library(tidyverse)
+```
+
+### Question 1
+
+```{r}
+#| output: false
+fish_encounters <- read_csv(
+  "fish_encounters.csv",
+  skip = 3
+  
+  ) |>
+  rename(
+    station = `Station name`,
+    fish_id = `fish ID`
+  )
+
+```
+
+In order to properly read in the data, I had to skip three lines because they included a discription, the author of the data, and then the source of the data. I also renamed the headers so that they would be easier to work with in the future.
+
+### Question 2
+
+```{r}
+#| include: false
+nrow(fish_encounters)
+ncol(fish_encounters)
+names(fish_encounters)
+colSums(is.na(fish_encounters))
+unique(fish_encounters$seen)
+```
+
+In the `fish_encounters` data set there are 114 rows, and 3 columns with `fish_id`, `station`, and `seen` as column names. There are zero values in any of the columns containing "N/A", and the only value recorded in the `seen` column is 1 since the observations were only recorded for fish that were seen.
+
+### Question 3
+
+```{r}
+total_seen <- sum(fish_encounters$seen, na.rm = TRUE)
+total_stations <- n_distinct(fish_encounters$station)
+
+avg_fish_per_station <- total_seen/total_stations
+
+station_summary <- fish_encounters |>
+  group_by(station) |>
+  summarise(
+    total_seen = sum(seen, na.rm = TRUE)
+  )
+
+total_stations
+avg_fish_per_station
+station_summary
+```
+
+I computed how many different stations are recording fish with the average number of fish that were recorded at a station. I also recording the number of seen fish at each station.
+
+### Question 4
+
+```{r}
+#| eval: false
+ggplot(
+  data = station_summary, 
+  mapping = aes(x = station, y = total_seen)
+  
+) + 
+  geom_col() +
+  geom_hline(
+    yintercept = avg_fish_per_station
+  ) +
+    labs(
+      title = "Fish Seen per Station",
+      x = "Station", 
+      y = "Fish Seen"
+    )
+         
+```
+
+This graph combines the two metrics I calculated. It shows a bar graph with each station on the x axis and the amount of fish each station saw on the y axis. Then, it adds a horizontal line showing where the average is.
+
+### Question 5
+
+Overall, this data doesn't include much to work with. It would be really interesting if it included locations of the stations, types of fish, or anything like that. Something I could do however is see if a specific fish visited only specific stations. I'm not sure how I could do that yet.

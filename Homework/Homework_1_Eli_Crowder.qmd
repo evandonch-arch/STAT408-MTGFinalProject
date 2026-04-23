@@ -1,0 +1,55 @@
+---
+title: "Homework 1"
+author: "Eli Crowder"
+format: pdf
+---
+
+```{r}
+#| include: false
+library(palmerpenguins)
+library(ggplot2)
+library(tidyverse)
+```
+
+## 1.4.3 Exercises
+
+1.  Make a bar plot of `species` of `penguins`, where you assign `species` to the `y` aesthetic. How is this plot different? 
+
+```{r}
+ggplot(penguins, aes(y = species)) +
+  geom_bar()
+```
+
+This plot is different because the bars are arranged on the y axis and extend horizontally instead of vertically.
+
+2.  How are the following two plots different? Which aesthetic, `color` or `fill`, is more useful for changing the color of bars?
+
+```{r}
+#| eval: false
+ggplot(penguins, aes(x = species)) +
+  geom_bar(color = "red")
+
+ggplot(penguins, aes(x = species)) +
+  geom_bar(fill = "red")
+```
+
+The two plots are different in the way that they assign `red`. In the first where `color = "red"`, the bars are outlined in red and in the second where `fill = "red"` the whole bar is red. Because of this, I think `fill` is more useful when changing the bar color. 
+
+3.  What does the `bins` argument in `geom_histogram()` do?
+
+The `bins` argument in `geom_histogram()` controls how many bars or "bins" the histogram uses to group the data. For example, if `bins = 30`, it divides the data range into 30 equal-width bins, then count observations in each bin.
+
+4.  Make a histogram of the `carat` variable in the `diamonds` dataset that is available when you load the tidyverse package. Experiment with different binwidths. What binwidth reveals the most interesting patterns?
+
+```{r}
+ggplot(diamonds, aes(x = carat)) +
+  geom_histogram(binwidth = .01)
+```
+
+The `binwidth` that I thought was most interesting was .01 because it included a lot more bars and I was able to see large spikes around very specific carats. I think this revealed more information rather than just a few bigger bins. 
+
+
+
+
+
+

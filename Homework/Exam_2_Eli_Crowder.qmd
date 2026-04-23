@@ -1,0 +1,165 @@
+---
+title: "Exam 2"
+author: "Eli Crowder"
+format: pdf
+---
+
+# Results
+
+## Table
+
+The table below shows the average temperature, dissolved oxygen, and pH for each river. I first read in the rivers dataset and cleaned the variables so that the date was stored as a date, the site was treated as a river name, and the measurement variables were numeric. Then I grouped the data by river and used `summarize()` to compute the average for each variable. I used `kable()` from the `knitr` package to display the table and set `digits = 2` so the averages only show two decimal places. One issue I had to deal with was making sure the date column was converted with the correct format string, since the dates were written as month/day/year.
+
+```{r}
+#| include: false
+library(tidyverse)
+library(knitr)
+```
+
+```{r}
+#| include: false
+rivers <- read_csv("Labs/Data/rivers.csv", show_col_types = FALSE) %>%
+  mutate(
+    date = as.Date(date, format = "%m/%d/%Y"),
+    river = as.factor(site),
+    temp = as.numeric(temperature),
+    do = as.numeric(dissolved_oxygen),
+    ph = as.numeric(pH),
+    month = as.numeric(format(date, "%m"))
+  )
+```
+
+```{r}
+#| results: asis
+avg_table <- rivers %>%
+  group_by(river) %>%
+  summarize(
+    avg_temp = mean(temp, na.rm = TRUE),
+    avg_do = mean(do, na.rm = TRUE),
+    avg_ph = mean(ph, na.rm = TRUE)
+  )
+
+knitr::kable(
+  avg_table,
+  digits = 2,
+  col.names = c("River", "Average Temperature", "Average Dissolved Oxygen", "Average pH")
+)
+```
+
+```{r}
+plot1_data <- rivers %>%
+  filter(temp > 25) %>%
+  count(river, name = "count")
+
+ggplot(plot1_data, aes(x = river, y = count, fill = river)) +
+  geom_col() +
+  labs(
+    title = "Number of Temperature Observations Above 25°F",
+    x = "River",
+    y = "Number of Observations"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+```{r}
+#| include: false
+wqs <- read_csv("Labs/Data/wqs.csv", show_col_types = FALSE) %>%
+  mutate(
+    river = as.factor(site),
+    month = as.numeric(month),
+    standard = as.numeric(standard)
+  )
+```
+
+```{r}
+combined <- rivers %>%
+  left_join(wqs, by = c("river", "month"))
+
+plot2_data <- combined %>%
+  filter(temp > standard) %>%
+  count(river, name = "count")
+
+ggplot(plot2_data, aes(x = river, y = count, fill = river)) +
+  geom_col() +
+  labs(
+    title = "Number of Temperature Exceedances of Water Quality Standards",
+    x = "River",
+    y = "Number of Exceedances"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+#Code
+
+```{r}
+#| eval: false
+
+library(tidyverse)
+library(knitr)
+
+rivers <- read_csv("Labs/Data/rivers.csv", show_col_types = FALSE) %>%
+  mutate(
+    date = as.Date(date, format = "%m/%d/%Y"),
+    river = as.factor(site),
+    temp = as.numeric(temperature),
+    do = as.numeric(dissolved_oxygen),
+    ph = as.numeric(pH),
+    month = as.numeric(format(date, "%m"))
+  )
+
+wqs <- read_csv("Labs/Data/wqs.csv", show_col_types = FALSE) %>%
+  mutate(
+    river = as.factor(site),
+    month = as.numeric(month),
+    standard = as.numeric(standard)
+  )
+
+avg_table <- rivers %>%
+  group_by(river) %>%
+  summarize(
+    avg_temp = mean(temp, na.rm = TRUE),
+    avg_do = mean(do, na.rm = TRUE),
+    avg_ph = mean(ph, na.rm = TRUE)
+  )
+
+knitr::kable(
+  avg_table,
+  digits = 2,
+  col.names = c("River", "Average Temperature", "Average Dissolved Oxygen", "Average pH")
+)
+
+plot1_data <- rivers %>%
+  filter(temp > 25) %>%
+  count(river, name = "count")
+
+ggplot(plot1_data, aes(x = river, y = count, fill = river)) +
+  geom_col() +
+  labs(
+    title = "Number of Temperature Observations Above 25°F",
+    x = "River",
+    y = "Number of Observations"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+combined <- rivers %>%
+  left_join(wqs, by = c("river", "month"))
+
+plot2_data <- combined %>%
+  filter(temp > standard) %>%
+  count(river, name = "count")
+
+ggplot(plot2_data, aes(x = river, y = count, fill = river)) +
+  geom_col() +
+  labs(
+    title = "Number of Temperature Exceedances of Water Quality Standards",
+    x = "River",
+    y = "Number of Exceedances"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+

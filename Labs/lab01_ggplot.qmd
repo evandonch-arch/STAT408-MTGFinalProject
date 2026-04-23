@@ -1,0 +1,165 @@
+---
+title: "STAT 408 Lab 1: Data Viz with `ggplot`"
+author: "Eli Crowder"
+date: today
+date-format: "01, 15, 2026"
+format: pdf
+embed-resources: true
+---
+
+1. Load the three packages you are using for this lab on the `penguins` dataset.
+
+```{r}
+library(ggplot2)
+library(palmerpenguins)
+library(ggthemes)
+```
+
+
+
+2. How many rows (observations) are in `penguins`? How many columns (variables)? What are the variables (column names) in this dataset? Answer these three questions using code covered in **lab01_notes.qmd**.
+
+```{r}
+nrow(penguins)
+ncol(penguins)
+names(penguins)
+```
+
+There are 344 rows, 8 columns, and the variable names are species, island, bill_length_mm, bill_depth_mm, flipper_length_mm, body_mass_g, sex, and year. 
+
+
+
+3. What does the `bill_depth_mm` variable in the `penguins` data frame describe? Read the help for ?penguins to find out.
+
+This variable holds a number denoting bill depth (millimeters).
+
+
+
+
+4. Make a scatterplot of `bill_depth_mm` vs. `bill_length_mm.` That is, make a scatterplot with `bill_depth_mm` on the y-axis and `bill_length_mm` on the x-axis. Describe (in text, not code or code comments) the relationship between these two variables.
+
+```{r}
+ggplot(
+data = penguins,
+mapping = aes(x = bill_length_mm, y = bill_depth_mm)
+) +
+geom_point()
+```
+
+There seems to be two clusters of data, a cluster of higher bill depth associated with lower bill length and a cluster of low bill depth associated with med/higher bill length. There also seems to be slight negative relationship. 
+
+
+
+5. What happens if you make a scatterplot of `species` vs. `bill_depth_mm`? (Make and show this scatterplot, then discuss in text what happens.) What might be a better choice of geom for this plot? (See other options mentioned in Section 1.2.3.)
+
+```{r}
+ggplot(
+data = penguins,
+mapping = aes(x = species, y = bill_depth_mm)
+) +
+geom_point()
+```
+
+There are three "columns" of data that aren't vry pleasing to look at. A better choice for geom might be geom_boxplot because it would display the data better.
+
+
+
+6. Why does the following code give an error? (Write your answer in text.) Fix it. (NOTE: you need to delete the line that says `#| eval: false` so that this code will run when you render your Quarto document.)
+
+There are no assigned variables or an x or y axis to plot on. 
+
+```{r}
+ggplot(
+data = penguins,
+mapping = aes(x = island, y = bill_depth_mm)
+) +
+geom_point()
+```
+
+
+
+7. What does the `na.rm` argument do in `geom_point()`? What is the default value of the argument? (Hint: to answer these questions, look up the help page for `geom_point()` the same way you did for the `penguins` dataset, and don't include the parentheses when you do that.) Then create a scatterplot where you successfully use this argument set to `TRUE`.
+
+If FALSE, the default, missing values are removed with a warning. If TRUE, missing values are silently removed.
+
+
+```{r}
+ggplot(
+data = penguins,
+mapping = aes(x = bill_length_mm, y = bill_depth_mm)
+) +
+geom_point(na.rm = TRUE)
+```
+
+
+
+8. Recreate the visualization in Exercise 8 of Section 1.2.5. What aesthetic should `bill_depth_mm` be mapped to? And should it be mapped at the global level or at the geom level?
+
+We should have bill_depth_mm mapped to the color aesthetic. After trying, it can be mapped at either the global level or the geom level. 
+
+```{r}
+ggplot(
+data = penguins,
+mapping = aes(x = flipper_length_mm, y = body_mass_g)
+) +
+geom_point(aes(color = bill_depth_mm)) + geom_smooth()
+```
+
+
+
+9. Add the following caption to the plot you made in the previous exercise: "Data come from the palmerpenguins package." Hint: Take a look at the documentation for` labs()`.
+
+```{r}
+ggplot(
+data = penguins,
+mapping = aes(x = flipper_length_mm, y = body_mass_g)
+) +
+geom_point(aes(color = bill_depth_mm)) + geom_smooth() + labs(caption = "Data come from the palmerpenguins package.")
+```
+
+
+
+10. Will these two graphs look different? Why/why not? (Please leave the `#| eval: false` option in this code chunk.)
+
+```{r}
+#| eval: false
+
+ggplot(
+  data = penguins,
+  mapping = aes(x = flipper_length_mm, y = body_mass_g)
+) +
+  geom_point() +
+  geom_smooth()
+
+ggplot() +
+  geom_point(
+    data = penguins,
+    mapping = aes(x = flipper_length_mm, y = body_mass_g)
+  ) +
+  geom_smooth(
+    data = penguins,
+    mapping = aes(x = flipper_length_mm, y = body_mass_g)
+  )
+```
+
+These two graphs will not look different, one sets everything globally and the other sets everything in the geom, just using the same data set and mapping each time. 
+
+
+
+11. Type the name of the function we used in this lab for each of the following tasks.
+
+- Getting the number of variables in a dataset: ncol()
+- Setting up plot aesthetics: aes()
+- Loading a package: library()
+- Getting the number of rows in a dataset: nrow()
+- Installing a package: install.packages()
+
+
+
+12. Make a few notes here for yourself about some useful tips and tricks you learned (or were reminded of) in today's lab.
+
+I have learned everything I know about R from this lab! Something that sticks out is global vs geom. Learning about how to make, color, and label graphs was also very interesting. 
+
+
+
+

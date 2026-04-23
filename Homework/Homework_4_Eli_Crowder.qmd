@@ -1,0 +1,158 @@
+---
+title: "Exam 1 Preparation"
+author: "Eli Crowder"
+date: Feb 10 2026
+format: pdf
+---
+
+```{r}
+#| include: false
+library(tidyverse)
+```
+
+## Group 1 - Packages (base R):
+
+Use `install.packages()` once when first installing a package and then run `library()` at the beginning of each fresh instance of code (new document, file, etc) to be able to use that package.
+
+```{r}
+#| eval: false
+install.packages("_")
+library(_)
+```
+
+## Group 2 - Plotting (ggplot2):
+
+-   `aes` or "aesthetic" is used to define the mappings between variables and their visual properties
+
+-   `ggplot` initializes the plot. `data` and `mapping` are both included inside this function.
+
+-   `geom_bar`, `geom_histogram`, `geom_line`, and `geom_point` are all different types of plots the function can create (bar graph, histogram, line, and points) and follows the + after closing a `ggplot` function
+
+-   `labs` follows a + sign after the geom and allows you to create titles, subtitles, axis labels, and captions among other things
+
+### For example,
+
+```{r}
+#| eval: false
+ggplot(
+  data = _,
+  mapping = aes(x = _, y = _)
+  ) + 
+  geom_bar() +
+  labs(title = "_", x = "_", y = "_", caption = "_")
+```
+
+## Group 3 - Data manipulation (dplyr):
+
+-   `arrange` sorts rows of a dataset by one or more variables
+
+    -   `arrange(df, var)`
+
+-   `count` counts the number of observations by group
+
+    -   `count(var)`
+
+-   `desc` is used inside of `arrange` to sort in descending order
+
+    -   `arrange(desc(var))`
+
+-   `distinct` keeps unique rows based on one or more variables
+
+    -   `distinct(var)`
+
+-   `filter` keeps rows that satisfy specific conditions
+
+    -   `filter(var > 10)`
+
+-   `group_by` groups the data so subsequent operations are done within groups
+
+    -   `group_by(var)`
+
+-   `mutate` adds or modifies columns without changing the number of rows
+
+    -   `mutate(new_var = expression)`
+
+-   `relocate` allows you to move columns to a new position
+
+    -   `relocate(var, .before = other_var)`
+
+-   `rename` allows you to rename columns using new_name = old_name
+
+    -   `rename(new = old)`
+
+-   `select` allows you to choose a subset of columns from a dataset
+
+    -   `select(col1, col2)`
+
+-   `summarize` computes summary statistics and reduces data to one row per group
+
+    -   `summarize(mean_x = mean(x))`
+
+## Group 4 - Tidying Data (tidyr):
+
+-   `pivot_longer` turns multiple columns into rows [making data longer]{.underline}
+
+    -   `pivot_longer(cols, names_to, values_to)`
+
+-   `pivot_wider` turns rows into columns [making data wider]{.underline}
+
+    -   `pivot_wider(names_from, values_from)`
+    
+### For example,
+
+```{r}
+# Original Wide Data
+scores <- tibble(
+  student = c("Alex", "Blair", "Casey"),
+  exam1 = c(85, 90, 88),
+  exam2 = c(87, 92, 91)
+)
+```
+
+```{r}
+scores_long <- scores |>
+  pivot_longer(
+    cols = starts_with("exam"),
+    names_to = "exam",
+    values_to = "score"
+  )
+```
+
+```{r}
+# Original Long Data
+weather <- tibble(
+  day = c("Mon", "Mon", "Tue", "Tue"),
+  city = c("Bozeman", "Helena", "Bozeman", "Helena"),
+  temp = c(70, 68, 72, 69)
+)
+```
+
+```{r}
+weather_wide <- weather |>
+  pivot_wider(
+    names_from = city,
+    values_from = temp
+  )
+```
+
+
+## Group 5 - Viewing Data (base R):
+
+-   `c` combines values into a vector
+
+-   `dim` returns the number of rows and columns for a dataset
+
+-   `head` returns the first six rows of a dataset by default but can return n rows
+
+-   `max` returns the largest value
+
+-   `mean` returns the average value (numeric values)
+
+-   `min` returns the smallest value
+
+-   `names` returns the column (variable) names of the dataset
+
+-   `ncol` returns the number of columns
+
+-   `nrow` returns the number of rows
+

@@ -1,0 +1,171 @@
+---
+title: "STAT 408 Lab 2: dplyr"
+author: "Eli Crowder"
+date: Jan 22 2026
+format: pdf
+---
+
+```{r}
+#| include: false
+library(nycflights13)
+library(tidyverse)
+```
+
+
+## Section 3.2.5: working with rows
+
+1. In a single pipeline for each condition, find all flights that meet the condition:
+
+* Had an arrival delay of two or more hours
+* Flew to Houston (`IAH` or `HOU`)
+* Were operated by United, American, or Delta
+* Departed in summer (July, August, and September)
+* Arrived more than two hours late but didn’t leave late
+* Were delayed by at least an hour, but made up over 30 minutes in flight
+
+```{r}
+#| output: false
+flights |>
+  filter(arr_delay >= 120)
+
+flights |>
+  filter(dest == "IAH" | dest == "HOU") 
+
+flights |>
+  filter(carrier == "UA" | carrier == "AA" | carrier == "DL")
+
+flights |>
+  filter(month == 7 | month == 8 | month == 9)
+
+flights |>
+  filter(arr_delay > 120, dep_delay <= 0)
+
+flights |>
+  filter(dep_delay >= 60, (dep_delay - arr_delay) > 30)
+```
+
+
+2. Sort `flights` to find the flights with the longest departure delays. Find the flights that left earliest in the morning.
+
+```{r}
+#| output: false
+flights |>
+  arrange(desc(dep_delay))
+
+flights |>
+  arrange(dep_time)
+```
+
+
+3. Sort `flights` to find the fastest flights. (Hint: Try including a math calculation inside of your function.)
+
+```{r}
+#| output: false
+flights |>
+  arrange(distance/air_time)
+```
+
+
+4. Was there a flight on every day of 2013?
+
+```{r}
+#| output: false
+flights |>
+  count(month, day)
+```
+
+Yes, there was a flight every day of 2013 because there are 365 rows. 
+
+5. Which flights traveled the farthest distance? Which traveled the least distance?
+
+```{r}
+#| output: false
+flights |>
+  arrange(desc(distance))
+
+flights |>
+  arrange(distance)
+```
+
+Quite a few flights traveled 4,983 miles while one flight traveled 17 miles.
+
+6. Does it matter what order you used `filter()` and `arrange()` if you’re using both? Why/why not? Think about the results and how much work the functions would have to do. 
+
+I don't think the order matters because in most cases, the order of filter() and arrange() does not change the final result because filtering removes rows and arranging only reorders them.
+
+
+## Section 3.3.5: working with columns
+
+1. Compare `dep_time`, `sched_dep_time`, and `dep_delay`. How would you expect those three numbers to be related?
+
+Well, `dep_time` is the time the plane actually takes off, `sched_dep_time` is the time it was supposed to take off, and `dep_delay` is the difference between the two where a positive means it took off later than schedules and a negative before it was scheduled. 
+
+2. Brainstorm as many ways as possible to select `dep_time`, `dep_delay`, `arr_time`, and `arr_delay` from `flights`.
+
+```{r}
+#| output: false
+flights |>
+  select(dep_time, dep_delay, arr_time, arr_delay)
+
+flights |>
+  select(4, 6, 7, 9)
+
+flights |>
+  select(starts_with("dep"), starts_with("arr"))
+```
+
+
+3. What happens if you specify the name of the same variable multiple times in a `select()` call?
+
+```{r}
+#| output: false
+flights |>
+  select(dep_time, dep_time)
+```
+
+If you specify the name of the same variable multiple times it only returns the variable once. 
+
+4. What does the `any_of()` function do? Why might it be helpful in conjunction with this vector?
+
+```{r}
+#| display: false
+variables <- c("year", "month", "day", "dep_delay", "arr_delay")
+```
+
+The function `any_of()` returns columns if they exist but doesn't return an error if they don't. I don't really see how it could be helpful because all these columns exist in the data set. It could be helpful in the future if I am using this code again but I don't think that's the case. 
+
+5. Does the result of running the following code surprise you? How do the select helpers deal with upper and lower case by default? How can you change that default?
+
+```{r}
+#| output: false
+flights |> select(contains("TIME"))
+```
+
+No it doesn't surprise me it just returned all the columns that contain "time." The select helpers are case insensitive by default. You could use `ignore.case = FALSE` to ignore the default setting. 
+
+6. Rename `air_time` to `air_time_min` to indicate units of measurement and move it to the beginning of the data frame.
+
+```{r}
+#| output: false
+flights |>
+  rename(air_time_min = air_time) |> 
+  relocate(air_time_min)
+
+```
+
+
+7. Why doesn’t the following work, and what does the error mean?
+
+```{r}
+#| eval: false
+flights |> 
+  select(tailnum) |> 
+  arrange(arr_delay)
+#> Error in `arrange()`:
+#> ℹ In argument: `..1 = arr_delay`.
+#> Caused by error:
+#> ! object 'arr_delay' not found
+```
+
+It doesn't work because everything is removed from the data frame but `tailnum` after the first function. The error is saying it can't "arrange" it because it's not there. 
+

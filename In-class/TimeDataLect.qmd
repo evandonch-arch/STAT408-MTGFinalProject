@@ -1,0 +1,243 @@
+---
+title: "Dates: Not the Fruit"
+author: "DJ Moritz"
+format: html
+date: today
+editor: visual
+---
+
+```{r setup}
+library(tidyverse)
+library(nycflights13)
+
+
+```
+
+## Reading Data with Dates
+
+```{r read_data}
+
+water = read_csv(
+  "Data/CedarLower_water_sum_22.csv",
+  skip = 2, # skip the first two lines of the file
+  col_select = 1:3, # read only the first three columns of data
+  col_names = FALSE, # don't try to name columns from a row of the file
+  show_col_types = FALSE
+) |>
+  rename(
+    "rowid" = X1,
+    "datetime" = X2,
+    "temperature" = X3
+  )
+
+
+str(water)
+head(water$datetime)
+#water$datetime[2] - water$datetime[1] # doesn't work; subtraction between text values is undefined
+
+# let's convert the datetime column to a datetime (POSIXct) variable type
+water = water |>
+  mutate(datetime = mdy_hms(datetime))
+
+
+str(water) # now datetime variable is POSIXct type
+head(water$datetime) # notice the format with -'s in the date, :'s in the time, and a timezone
+water$datetime[2] - water$datetime[1] # tells you the time difference!
+
+```
+
+## From strings
+
+Lubridate contains a collection of function which operate on strings allowing us to transform a "word" into a date.
+
+```{r strings}
+
+ymd("2017-01-31")
+
+mdy("January 31st, 2017")
+
+dmy("31-Jan-2017")
+
+ymd_hms("2017-01-31 20:11:59")
+
+
+```
+
+## Combining Columns
+
+There are also functions to combine data from multiple columns in a dataframe/tibble into one date variable
+
+```{r combine_columns}
+
+flights |> 
+  select(year, month, day, hour, minute)
+
+flights |> 
+  select(year, month, day, hour, minute) |> 
+  mutate(departure = make_datetime(year, month, day, hour, minute))
+
+```
+
+```{r odd_formatted_time}
+
+
+make_datetime_100 <- function(year, month, day, time) {
+  make_datetime(year, month, day, time %/% 100, time %% 100)
+}
+
+flights_dt <- flights |> 
+  filter(!is.na(dep_time), !is.na(arr_time)) |> 
+  mutate(
+    dep_time = make_datetime_100(year, month, day, dep_time),
+    arr_time = make_datetime_100(year, month, day, arr_time),
+    sched_dep_time = make_datetime_100(year, month, day, sched_dep_time),
+    sched_arr_time = make_datetime_100(year, month, day, sched_arr_time)
+  ) |> 
+  select(origin, dest, ends_with("delay"), ends_with("time"))
+```
+
+```{r}
+flights_dt |> 
+  ggplot(aes(x = dep_time)) + 
+  geom_freqpoly(binwidth = 86400) #binwidth = 60*60*24
+```
+
+```{r}
+flights_dt |> 
+  filter(dep_time < ymd(20130102)) |> 
+  ggplot(aes(x = dep_time)) + 
+  geom_freqpoly(binwidth = 600) # 600 s = 10 minutes
+```
+
+## Extract from Date variables
+
+```{r}
+datetime <- ymd_hms("2026-07-08 12:34:56")
+
+year(datetime)
+
+month(datetime)
+
+mday(datetime)
+
+yday(datetime)
+
+wday(datetime)
+
+
+```
+
+```{r}
+flights_dt |> 
+  mutate(minute = minute(dep_time)) |> 
+  group_by(minute) |> 
+  summarize(
+    avg_delay = mean(dep_delay, na.rm = TRUE),
+    n = n()
+  ) |> 
+  ggplot(aes(x = minute, y = avg_delay)) +
+  geom_line()
+```
+
+```{r}
+sched_dep <- flights_dt |> 
+  mutate(minute = minute(sched_dep_time)) |> 
+  group_by(minute) |> 
+  summarize(
+    avg_delay = mean(arr_delay, na.rm = TRUE),
+    n = n()
+  )
+
+ggplot(sched_dep, aes(x = minute, y = avg_delay)) +
+  geom_line()
+
+```
+
+## Fixing Errors
+
+```{r}
+
+(datetime <- ymd_hms("2026-07-08 12:34:56"))
+
+
+year(datetime) <- 2030
+datetime
+
+month(datetime) <- 01
+datetime
+
+hour(datetime) <- hour(datetime) + 1
+datetime
+
+
+```
+
+## Time Computations
+
+```{r}
+
+h_age <- today() - ymd("1979-10-14")
+h_age
+
+```
+
+```{r}
+dseconds(15)
+
+dminutes(10)
+
+dhours(c(12, 24))
+
+ddays(0:5)
+
+dweeks(3)
+
+dyears(1)
+
+```
+
+```{r}
+2 * dyears(1)
+#> [1] "63115200s (~2 years)"
+dyears(1) + dweeks(12) + dhours(15)
+```
+
+```{r}
+tomorrow <- today() + ddays(1)
+last_year <- today() - dyears(1)
+```
+
+```{r}
+one_am <- ymd_hms("2026-03-08 01:00:00", tz = "America/New_York")
+
+one_am + days(1)
+10 * (months(6) + days(1))
+
+days(50) + hours(25) + minutes(2)
+
+
+```
+
+## Time Zones
+
+```{r}
+Sys.timezone()
+length(OlsonNames()) # List of all time zones
+head(OlsonNames())
+
+x1 <- ymd_hms("2024-06-01 12:00:00", tz = "America/New_York")
+x1
+
+
+x2 <- ymd_hms("2024-06-01 18:00:00", tz = "Europe/Copenhagen")
+x2
+
+
+x3 <- ymd_hms("2024-06-02 04:00:00", tz = "Pacific/Auckland")
+x3
+
+## Are these the same time?
+
+
+
+```

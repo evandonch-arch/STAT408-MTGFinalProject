@@ -1,0 +1,142 @@
+---
+title: "Homework 2: Reference sheet"
+author: "Eli Crowder"
+date: Jan 27 2026
+format: pdf
+---
+
+```{r}
+#| include: false
+library(ggplot2)
+library(tidyverse)
+```
+
+# Basics
+
+### Installing and Running Packages
+
+```{r}
+#| eval: false
+install.packages() # to install it on your computer; do this step just once
+library() # to load tidyverse in a specific R session so you can use it
+```
+
+### Chunk Options
+
+| Option           | Runs code | Shows code | Shows output |
+|------------------|-----------|------------|--------------|
+| *(default)*      | +         | +          | +            |
+| `eval: false`    | -         | +          | -            |
+| `echo: false`    | +         | -          | +            |
+| `output: false`  | +         | +          | -            |
+| `include: false` | +         | -          | -            |
+| `display: true`  | +         | +          | +            |
+
+Common uses:
+
+Setup chunks → include: false
+
+Show results, hide code → echo: false
+
+Show example code only → eval: false
+
+# Quarto Formatting
+
+*italic* **bold** ~~strikeout~~ `code`
+
+superscript^2^ subscript~2~
+
+[underline]{.underline} [small caps]{.smallcaps}
+
+"\## Headings"
+
+"\# 1st Level Header"
+
+"\## 2nd Level Header"
+
+"\### 3rd Level Header"
+
+## Lists
+
+-   Bulleted list item 1
+
+-   Item 2
+
+    -   Item 2a
+
+    -   Item 2b
+
+1.  Numbered list item 1
+
+2.  Item 2. The numbers are incremented automatically in the output.
+
+## Links and images
+
+<http://example.com>
+
+[linked phrase](http://example.com)
+
+## Tables
+
+| First Header | Second Header |
+|--------------|---------------|
+| Content Cell | Content Cell  |
+| Content Cell | Content Cell  |
+
+# Data Analysis
+
+-   names() → see the variables in the dataset
+
+-   head() → shows you the first 6 rows
+
+-   nrow() → how many rows (observations) are there?
+
+-   ncol() → how many columns (variables)?
+
+-   dim() → nrow x ncol; dim = dimensions
+
+-   ?function → opens help info
+
+# ggplot (Graphs)
+
+```{r}
+#| eval: false
+ggplot(
+data = _,
+mapping = aes(x = _, y = _)
+) +
+geom_point(aes(color = _)) + geom_smooth() + labs(caption = "_")
+```
+
+-   ggplot(...) → initializes the plot data → specifies data frame being used
+-   mapping = aes(x = *, y =* )
+    -   Defines the global aesthetics
+    -   Maps variables to the x- and y-axes
+    -   These mappings apply to all geoms, unless overridden later
+-   \+ → adds layers
+    -   The + operator adds layers or components to the plot
+    -   Each layer builds on the previous one
+-   geom_point() → scatterplot
+-   geom_bar() → bargraph
+-   aes(color = ) → color by variable (this layer only)
+-   geom_smooth() → trend line labs() → titles, labels, caption
+
+# dplyr (Data Manipulation)
+
+-   df |> function()
+  -   Reads as: “take df then do this”
+  -   Avoids nested function calls
+-   select() → choose columns
+-   filter() → choose rows
+-   arrange() → sort rows
+-   count() → count observations
+-   rename() → rename columns
+-   relocate() → move columns
+
+# In-class notes for 1/27
+
+Scripts vs Quarto docs
+
+-   scripts (.R file extension) do not have any text formatting, just code and code comments 
+
+

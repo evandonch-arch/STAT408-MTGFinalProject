@@ -1,0 +1,166 @@
+---
+title: "STAT 408 Lab 3: `tidyr`"
+author: "Eli Crowder"
+date: Jan 29 2026
+date-format: "MMM DD, YYYY"
+format:
+  pdf:
+    geometry:
+      - inner=3cm
+      - outer=4cm
+      - top=1cm
+      - bottom=4cm
+embed-resources: true
+editor_options: 
+  chunk_output_type: console
+---
+
+Note: **DO NOT** leave in any template text that says to replace it with your answers!
+
+```{r}
+#| include: false
+library(tidyverse)
+library(nycflights13)
+```
+
+
+## Summary statistics
+
+### Exercise 1
+
+Write code to compute the average departure delay for each carrier. Remember to give your new variable a sensible name. Make sure to ignore missing data when computing your summary statistics.
+
+```{r}
+#| output: false
+flights |>
+  group_by(carrier) |>
+  summarize(avg_delay = mean(dep_delay, na.rm = TRUE))
+```
+
+### Exercise 2
+
+Write code to compute the shortest, longest, and average time a flight spent in the air, by month. Remember to give your new variable a sensible name. Make sure to ignore missing data when computing your summary statistics.
+
+```{r}
+#| output: false
+flights |>
+  group_by(month) |>
+  summarize(
+    shortest = min(air_time, na.rm = TRUE),
+    longest = max(air_time, na.rm = TRUE),
+    avg_air_time = mean(air_time, na.rm = TRUE)
+  )
+```
+
+
+
+## Tidying data
+
+### Exercise 3
+
+Using the `tidyr` dataset `table1`, make a `ggplot` plot that shows a (very short) time series for each country of the number of tuberculosis cases. In other words, the horizontal axis should be time, the vertical axis should be cases, and you should have one line per country.
+
+```{r}
+ggplot(
+  data = table1,
+  mapping = aes(x = year, y = cases, group = country, color = country)
+  
+) +
+
+geom_line() + geom_point()
+```
+
+### Exercise 4
+
+Make some notes for yourself:
+
+*How can you tell whether you need `pivot_longer` or `pivot_wider`?*
+
+You should use `pivot_longer` when you want column names to be values and you should use `pivot_wider` when you want values to be column names. 
+
+*How can you remember what basic information you need to give these functions and what those arguments are called?*
+
+You can remember the required arguments by thinking about the direction of the pivot: `pivot_longer(`) needs `cols`, `names_to`, and `values_to` because columns are being turned into rows, while `pivot_wider()` needs `names_from` and `values_from` because values in a column are being spread into new columns. 
+
+*How can you figure out the answers to the previous question when you don't remember?*
+
+You can look at your notes/previous assignments or use the `?pivot_longer` or `?pivot_wider` in the console to access the help window. 
+
+
+### Exercise 5
+
+Let's check out a `tidyr` dataset called `relig_income`. Remember, you don't have to do anything to load or use the dataset as long as `tidyr` is loaded, though if you want to see it in the Environment pane so you can click on it and visualize it, you can use `data(relig_income)`.
+
+This dataset tells you some survey results on respondents' religion and income level. Specifically, there's a row for each religion, a column for each income level, and the value of the cell is how many respondents reported that religion and income level.
+
+Use `names(relig_income)` to see what the variables of this dataset are. Then pivot the dataset so that there is a `religion` column, a column called `income` indicating the income level (such as `<$10k`), and a `count` column that tells you how many people had that combination of religion and income level.
+
+```{r}
+#| include: false
+data(relig_income) # this line of code is optional
+names(relig_income) # this line of code shows you the variable names
+```
+
+```{r}
+#| output: false
+relig_income
+relig_income |>
+  pivot_longer(!religion, names_to = "income", values_to = "count")
+```
+
+
+### Exercise 6
+
+Pick two examples from the [pivoting vignette in the R documentation](https://tidyr.tidyverse.org/articles/pivot.html), one example of `pivot_longer` and one of `pivot_wider`, that you think are useful for your own data and applications. Explain them here in your own tutorial, using a mix of text, code, and code comments. In other words, write a tutorial like the pivoting vignette linked above to guide someone through these examples. Help your reader (i.e. your future self!) understand the original structure of the dataset, what dataset you want to transform it into using pivoting, and how to use pivoting to get there (including what arguments you need and why).
+
+**Example:** `pivot_longer`:
+```{r}
+#| output: false
+billboard |>
+  pivot_longer(
+    cols = starts_with("wk"),    # columns that represent the same variable (week)
+    names_to = "week",           # new column for former column names (wk1, wk2, ...)
+    values_to = "rank",          # new column for the rankings
+    values_drop_na = TRUE        # drop rows where the rank is NA
+  )
+```
+
+**Explanation:**
+
+-   `cols = starts_with("wk")` tells R which columns to pivot
+
+-   `names_to = "week"` stores the old column names as values in a new column
+
+-   `values_to = "rank"` stores the cell values in a single column
+
+-   `values_drop_na` = TRUE removes weeks where a song was not ranked
+
+USE `pivot_longer()` WHEN COLUMN NAMES SHOULD BECOME VALUES
+
+
+
+**Example:** `pivot_wider`:
+```{r}
+#| output: false
+fish_encounters |>
+  pivot_wider(
+    names_from = station,        # values that become new column names 
+    values_from = seen           # values that fill those columns 
+  )
+```
+
+**Explanation:**
+
+-   `names_from` = station turns the station names into column headers
+
+-   `values_from` = seen fills the new columns with the observation values
+
+USE `pivot_wider()` WHEN VALUES IN A COLUMN SHOULD BECOME COLUMN NAMES
+
+
+**How I decide which pivot to use:**
+
+If I see many columns that represent the same variable → pivot_longer()
+
+If I see one column whose values should be columns → pivot_wider()
+

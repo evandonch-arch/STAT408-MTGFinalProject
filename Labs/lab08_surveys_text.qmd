@@ -1,0 +1,215 @@
+---
+title: "STAT 408 Lab 8: Strings and Text"
+author: "Eli Crowder"
+date: 5 March 2026
+format: pdf
+---
+
+```{r}
+#| include: false
+library(tidyverse)
+options(tibble.print_max = 100)
+```
+
+## Problem 1
+
+```{r}
+stat408 <- read_csv("Data/408 Survey.csv", show_col_types = FALSE)
+
+names(stat408) = c(
+  "timestamp", 
+  "dist_to_campus", 
+  "where_from", 
+  "fav_class", 
+  "edrinks_per_wk", 
+  "fav_dining", 
+  "fav_NFL", 
+  "major", 
+  "year", 
+  "study_hours_per_wk",
+  "fav_day", 
+  "fav_season", 
+  "fav_water_pH", 
+  "time_to_campus", 
+  "hrs_sleep_per_day",
+  "fav_olympic")
+
+stat408 <- stat408 |>
+  separate_wider_delim(
+    fav_olympic,
+    delim = "because",
+    names = c("fav_olympic_sport", "fav_olympic_sport_why"),
+    too_few = "align_start"
+  )
+
+stat408 |> 
+  select(fav_olympic_sport, fav_olympic_sport_why)
+```
+
+This code worked well because it split up every instance where "because" was used, but sometimes respondents didn't use because and used things like "cause" and "bc" which didn't fix some columns. 
+
+\newpage
+
+## Problem 2 
+
+```{r}
+sports_survey <- read_csv("Data/STAT 408 Lab 7 Sports Survey.csv", show_col_types = FALSE)
+
+names(sports_survey) <- c(
+  "timestamp",
+  "fav_sport",
+  "greatest_athlete",
+  "n_sports_played",
+  "fav_jersey_num",
+  "fav_team",
+  "sports_impact",
+  "sports_drink",
+  "avg_miles"
+)
+
+sports_survey <- sports_survey |>
+  mutate(
+    sports_drink = str_to_lower(sports_drink)
+  )
+
+
+sports_survey <- sports_survey |>
+  mutate(
+    sports_drink = case_when(
+      is.na(sports_drink) ~ NA_character_,
+      str_detect(sports_drink, "gatorade") ~ "Gatorade",
+      str_detect(sports_drink, "body armor|body armour") ~ "Body Armor",
+      str_detect(sports_drink, "powerade") ~ "Powerade",
+      str_detect(sports_drink, "water") ~ "Water",
+      str_detect(sports_drink, "bicarb") ~ "Bicarb",
+      str_detect(sports_drink, "lemonade") ~ "Lemonade",
+      TRUE ~ "Other"
+    )
+  )
+
+sports_survey |> 
+  select(sports_drink)
+```
+
+\newpage
+
+## Problem 3
+
+```{r}
+school <- read_csv("Data/School_survey.csv", show_col_types = FALSE)
+
+names(school) <- c(
+  "timestamp",
+  "major",
+  "credits_taken",
+  "homework_hours_per_week",
+  "fav_class_why",
+  "semesters_to_graduate",
+  "cats_or_griz",
+  "extracurriculars",
+  "extracurricular_impact_life",
+  "participated_before_college",
+  "friend_from_extracurricular",
+  "enemy_from_extracurricular",
+  "live_with_extracurricular_person",
+  "extracurricular_impact_schoolwork",
+  "hours_per_week_extracurricular",
+  "money_spent_extracurricular"
+)
+
+school <- school |>
+  separate_longer_delim(extracurriculars, delim = "+") |>
+  separate_longer_delim(extracurriculars, delim = ",")
+  
+school |> 
+  select(extracurriculars)
+
+```
+
+\newpage
+
+## Problem 4
+
+```{r}
+living_bzn <- read_csv("Data/Living in Bozeman.csv", show_col_types = FALSE)
+
+names(living_bzn) <- c(
+  "timestamp",
+  "years_in_bozeman",
+  "bozeman_fun_activity",
+  "bozeman_area",
+  "fav_thing_bozeman_why",
+  "fav_season_bozeman",
+  "fav_least_fav_restaurants",
+  "distance_to_campus_miles",
+  "credits_taken_msu"
+)
+
+living_bzn <- living_bzn |>
+  mutate(
+    bozeman_area = str_to_lower(bozeman_area)
+)
+
+living_bzn <- living_bzn |>
+  mutate(
+    bozeman_area = case_when(
+      is.na(bozeman_area) ~ NA_character_,
+      str_detect(bozeman_area, "campus") ~ "Near/On Campus",
+      TRUE ~ bozeman_area
+    )
+)
+
+living_bzn |> 
+  select(bozeman_area)
+```
+
+I used `case_when` to change all the responses that included campus (all these responses were something like on campus or near campus) to just "Near/On Campus" which simplified the answers a little. 
+
+\newpage
+
+## Problem 5
+
+```{r}
+living_bzn <- read_csv("Data/Living in Bozeman.csv", show_col_types = FALSE)
+
+names(living_bzn) <- c(
+  "timestamp",
+  "years_in_bozeman",
+  "bozeman_fun_activity",
+  "bozeman_area",
+  "fav_thing_bozeman_why",
+  "fav_season_bozeman",
+  "fav_least_fav_restaurants",
+  "distance_to_campus_miles",
+  "credits_taken_msu"
+)
+
+living_bzn <- living_bzn |>
+  separate_wider_delim(
+    fav_thing_bozeman_why,
+    delim = "because",
+    names = c("fav_thing_bozeman", "fav_thing_bozeman_why"),
+    too_few = "align_start"
+  )
+
+living_bzn |> 
+  select(fav_thing_bozeman, fav_thing_bozeman_why)
+```
+
+For the Living in Bozeman data set, I approached it like problem 1 and separated the question part of the response from the why part of the response. 
+
+\newpage
+
+## Problem 6
+
+1. Two text variables with cleaning problems
+
+One example is the “favorite and least favorite restaurants in Bozeman” variable. Many responses list multiple restaurants or include explanations. Functions like str_to_lower() or separate_longer_delim() could standardize text or split entries, but they cannot reliably determine which restaurant is the favorite or least favorite without manual interpretation.
+
+Another example is the “favorite class and why” variable. Responses combine a class name and an explanation in many different formats. Functions like separate_wider_delim() could split answers that follow a pattern like “because,” but many responses do not follow the same format, so additional manual cleaning would still be needed.
+
+2. How the survey could be improved
+
+One improvement would be separating combined questions into multiple fields. For example, asking for the favorite class and the reason in two separate questions would make the data easier to clean and analyze.
+
+Another improvement would be using structured responses, such as dropdowns or checkboxes, instead of open text when possible. This reduces spelling differences and inconsistent formatting, which lowers the amount of data cleaning required later.
