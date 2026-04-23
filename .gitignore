@@ -3,4 +3,4 @@
 .RData
 .Rproj.user/
 .quarto/
-*_files/
+*_files/.claude/ 
