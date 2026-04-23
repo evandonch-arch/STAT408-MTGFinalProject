@@ -1,0 +1,971 @@
+---
+title: "MTG Card Explorer"
+author: "Eli Crowder & Evan Donch"
+format:
+  dashboard:
+    theme: darkly
+    nav-buttons: []
+    css: dashboard.css
+---
+
+```{r setup, include=FALSE}
+# ── Packages ──────────────────────────────────────────────────────────────────
+# tidyverse : data wrangling (dplyr, tidyr) and string tools (stringr)
+# jsonlite  : parse the JSON response from the Scryfall API
+# plotly    : interactive charts (hover, zoom, pan)
+# DT        : interactive sortable/filterable HTML tables
+# crosstalk : links filter widgets to a DT table without needing Shiny
+library(tidyverse)
+library(jsonlite)
+library(plotly)
+library(DT)
+library(crosstalk)
+
+
+# ── Step 1: Pull the Scryfall bulk data URL ───────────────────────────────────
+# Scryfall exposes a /bulk-data endpoint that lists available download files.
+# We first fetch that index, then grab the download URL for "default_cards",
+# which contains one entry per card printing (non-foil, English).
+bulk_info    <- fromJSON("https://api.scryfall.com/bulk-data")
+download_url <- bulk_info$data$download_uri[
+  bulk_info$data$type == "default_cards"
+]
+
+
+# ── Step 2: Download and trim the full card list ──────────────────────────────
+# The bulk JSON is large (~100 MB) but flatten = TRUE turns nested lists into
+# dot-separated column names, making it easy to work with as a data frame.
+# We immediately select only the columns we actually need to keep memory low.
+mtg_small <- fromJSON(download_url, flatten = TRUE) |>
+  as_tibble() |>
+  select(
+    oracle_id,              # Unique ID for the card concept (same across printings)
+    name,                   # Card name
+    mana_cost,              # Mana cost string, e.g. "{2}{U}{B}"
+    cmc,                    # Converted Mana Cost — total mana as a number
+    type_line,              # Full type string, e.g. "Legendary Creature — Dragon"
+    colors,                 # List-column of color codes: W, U, B, R, G
+    color_identity,         # Color identity (includes activated ability costs)
+    set,                    # 3-letter set code, e.g. "lea" for Alpha
+    rarity,                 # common / uncommon / rare / mythic / special / bonus
+    prices.usd,             # Lowest USD price across all non-foil market listings
+    legalities.standard,    # "legal", "not_legal", "banned", or "restricted"
+    legalities.modern,
+    legalities.commander
+  )
+
+
+# ── Step 3: Clean and deduplicate ────────────────────────────────────────────
+# Many cards appear in multiple sets (reprints). We want one row per unique
+# card concept, so we group by oracle_id and keep the cheapest printing.
+# This avoids double-counting the same card under different set codes.
+mtg_cheapest <- mtg_small |>
+
+  # Convert prices from character to numeric (NAs introduced for missing prices)
+  mutate(price = as.numeric(prices.usd)) |>
+
+  # Drop cards with no USD price data — these are typically digital-only or
+  # promo cards that don't have a secondary market listing
+  filter(!is.na(price)) |>
+
+  # Keep only the cheapest printing per oracle_id
+  group_by(oracle_id) |>
+  slice_min(price, with_ties = FALSE) |>
+  ungroup() |>
+
+  mutate(
+    # Collapse the list-column of color codes into one sorted string.
+    # sort() ensures consistent ordering (e.g., always "UB" not "BU").
+    # Cards with no colors (lands, artifacts) get labeled "Colorless".
+    color_str = sapply(colors, function(x) {
+      if (length(x) == 0) "Colorless" else paste(sort(x), collapse = "")
+    }),
+
+    # Count how many colors a card has — used to detect multicolor cards
+    color_count = sapply(colors, length),
+
+    # Broad single-label color category used in overview charts.
+    # Any card with 2+ colors is "Multicolor" regardless of which colors.
+    color_label = case_when(
+      color_count == 0  ~ "Colorless",
+      color_count >= 2  ~ "Multicolor",
+      color_str == "W"  ~ "White",
+      color_str == "U"  ~ "Blue",
+      color_str == "B"  ~ "Black",
+      color_str == "R"  ~ "Red",
+      color_str == "G"  ~ "Green",
+      TRUE              ~ "Other"
+    ),
+
+    # Assign one primary card type per card.
+    # str_detect() is used because type_line can contain multiple types,
+    # e.g. "Artifact Creature" — Creature takes precedence here.
+    card_type = case_when(
+      str_detect(type_line, "Creature")     ~ "Creature",
+      str_detect(type_line, "Instant")      ~ "Instant",
+      str_detect(type_line, "Sorcery")      ~ "Sorcery",
+      str_detect(type_line, "Enchantment")  ~ "Enchantment",
+      str_detect(type_line, "Artifact")     ~ "Artifact",
+      str_detect(type_line, "Land")         ~ "Land",
+      str_detect(type_line, "Planeswalker") ~ "Planeswalker",
+      TRUE                                  ~ "Other"
+    ),
+
+    # Re-encode rarity as an ordered factor so charts display in the correct
+    # gameplay order (common → uncommon → rare → mythic) not alphabetically
+    rarity = factor(
+      rarity,
+      levels = c("common", "uncommon", "rare", "mythic", "special", "bonus")
+    ),
+
+    # Full human-readable color combination used in the Card Browser filter.
+    # Unlike color_label, this distinguishes "Blue/Black" from plain "Blue",
+    # so the filter dropdown shows exact multi-color combinations.
+    color_combo = sapply(colors, function(x) {
+      if (length(x) == 0) return("Colorless")
+      lookup <- c(W = "White", U = "Blue", B = "Black", R = "Red", G = "Green")
+      paste(lookup[sort(x)], collapse = "/")
+    })
+  )
+
+
+# ── Color palettes ────────────────────────────────────────────────────────────
+# Named vectors so we can look up colors by name in plot_ly calls.
+# Colors are chosen to match the official MTG card frame colors.
+
+# One color per MTG identity
+mtg_pal <- c(
+  White     = "#f0e6c0",   # Cream/parchment — the Plains color
+  Blue      = "#1e6eb5",   # Island blue
+  Black     = "#8a7a9b",   # Swamp purple-gray (pure black is hard to see)
+  Red       = "#d44239",   # Mountain red
+  Green     = "#2a7a45",   # Forest green
+  Colorless = "#a0a0a0",   # Neutral gray for artifacts/lands
+  Multicolor = "#c8a032"   # Gold — the traditional multicolor frame color
+)
+
+# Rarity colors match the card border treatment in the actual game
+rarity_pal <- c(
+  common   = "#9e9e9e",   # Black border / gray
+  uncommon = "#5dade2",   # Silver
+  rare     = "#d4ac0d",   # Gold
+  mythic   = "#e67e22",   # Orange-gold
+  special  = "#8e44ad"    # Purple (used for Timeshifted etc.)
+)
+
+# Card type colors — loosely chosen to match thematic associations
+type_pal <- c(
+  Creature     = "#2a7a45",   # Green — living things
+  Instant      = "#1e6eb5",   # Blue — reactive/tricky
+  Sorcery      = "#d44239",   # Red — powerful/direct
+  Enchantment  = "#8e44ad",   # Purple — magical/persistent
+  Artifact      = "#95a5a6",  # Silver-gray — mechanical
+  Land          = "#a0522d",  # Brown — terrain
+  Planeswalker  = "#c8a032",  # Gold — iconic characters
+  Other         = "#555555"   # Dark gray — catch-all
+)
+
+
+# ── Pre-computed summary values ───────────────────────────────────────────────
+# Calculated once here so they can be referenced across all pages and inside
+# inline R expressions in the markdown text cards (e.g. `r avg_price`).
+
+total_cards <- nrow(mtg_cheapest)
+avg_price   <- round(mean(mtg_cheapest$price), 2)
+med_price   <- round(median(mtg_cheapest$price), 2)
+most_exp    <- mtg_cheapest |> slice_max(price, n = 1, with_ties = FALSE)
+total_sets  <- n_distinct(mtg_cheapest$set)
+
+# Price tier counts — used in value boxes and inline text on Price Analysis page
+n_cheap <- sum(mtg_cheapest$price < 1)    # Cards under $1
+n_exp   <- sum(mtg_cheapest$price >= 10)  # Cards $10 or more
+n_rare  <- sum(mtg_cheapest$price >= 50)  # Cards $50 or more
+```
+
+# About This Dataset
+
+## Row {height="20%"}
+
+```{r}
+#| content: valuebox
+#| title: "Unique Cards"
+# total_cards is the number of rows after deduplication by oracle_id
+list(icon = "collection", color = "primary",
+     value = format(total_cards, big.mark = ","))
+```
+
+```{r}
+#| content: valuebox
+#| title: "Avg Price (USD)"
+# Mean price across all unique cards (cheapest printing each)
+list(icon = "currency-dollar", color = "warning",
+     value = paste0("$", avg_price))
+```
+
+```{r}
+#| content: valuebox
+#| title: "Most Expensive"
+# Card with the single highest market price in the dataset
+list(icon = "trophy", color = "danger",
+     value = paste0("$", round(most_exp$price, 2)),
+     subtitle = most_exp$name)
+```
+
+```{r}
+#| content: valuebox
+#| title: "Sets Represented"
+# Count of distinct 3-letter set codes in the deduplicated dataset
+list(icon = "layers", color = "success",
+     value = format(total_sets, big.mark = ","))
+```
+
+## Row {height="80%"}
+
+### Column {width="40%"}
+
+::: {.card}
+### About This Dashboard
+
+This dashboard explores **Magic: The Gathering** card data sourced from the
+[Scryfall](https://scryfall.com) bulk data API — a comprehensive, regularly
+updated database of every MTG card ever printed.
+
+**What is in the dataset?**
+
+Each row represents a unique card (identified by its `oracle_id`), keeping
+only the cheapest available printing when multiple exist. The key variables we
+analyze are:
+
+| Variable | Description |
+|---|---|
+| `name` | Card name |
+| `cmc` | Converted Mana Cost — total mana to cast |
+| `colors` | Color identity (W, U, B, R, G) |
+| `type_line` | Card type (Creature, Instant, etc.) |
+| `rarity` | Common, Uncommon, Rare, Mythic, Special |
+| `price` | Lowest USD market price across all printings |
+| `legalities` | Whether the card is legal in Standard, Modern, or Commander |
+
+**What does this dashboard explore?**
+
+- **Price Analysis** — How are card prices distributed? What drives value?
+- **Mana & Color** — How complex are cards by mana cost and color?
+- **Format Legality** — What share of cards are legal in each format?
+- **Card Browser** — Search and filter the full card database yourself.
+:::
+
+### Column {width="60%"}
+
+```{r}
+#| title: "Card Count by Color"
+
+# Count cards per broad color category, then set factor order for the chart
+color_counts <- mtg_cheapest |>
+  count(color_label) |>
+  mutate(color_label = factor(
+    color_label,
+    levels = c("White", "Blue", "Black", "Red", "Green", "Colorless", "Multicolor")
+  ))
+
+# Use mtg_pal to color each bar by the card's actual MTG color.
+# cliponaxis = FALSE lets count labels render above bars without being clipped.
+plot_ly(color_counts,
+  x     = ~reorder(color_label, -n),
+  y     = ~n,
+  type  = "bar",
+  marker = list(
+    color = mtg_pal[as.character(color_counts$color_label)],
+    line  = list(color = "#1a1a2e", width = 1)
+  ),
+  text          = ~format(n, big.mark = ","),
+  textposition  = "outside",
+  cliponaxis    = FALSE,
+  hovertemplate = "<b>%{x}</b><br>Cards: %{y:,}<extra></extra>"
+) |>
+  layout(
+    xaxis  = list(title = "Color",      color = "#c9d1d9", automargin = TRUE),
+    yaxis  = list(title = "Card Count", color = "#c9d1d9", automargin = TRUE),
+    paper_bgcolor = "#1a1a2e",
+    plot_bgcolor  = "#1a1a2e",
+    font   = list(color = "#c9d1d9"),
+    margin = list(t = 40, b = 60, l = 60, r = 40)
+  )
+```
+
+```{r}
+#| title: "Card Count by Type"
+
+# Count cards per type and sort ascending so the longest bar is at the top
+# when we flip to a horizontal bar chart
+type_counts <- mtg_cheapest |>
+  count(card_type) |>
+  arrange(n)
+
+# Horizontal bar chart — easier to read long category names on the y-axis
+plot_ly(type_counts,
+  x           = ~n,
+  y           = ~reorder(card_type, n),
+  type        = "bar",
+  orientation = "h",
+  marker = list(
+    color = type_pal[as.character(type_counts$card_type)],
+    line  = list(color = "#1a1a2e", width = 1)
+  ),
+  text          = ~format(n, big.mark = ","),
+  textposition  = "outside",
+  cliponaxis    = FALSE,
+  hovertemplate = "<b>%{y}</b><br>Cards: %{x:,}<extra></extra>"
+) |>
+  layout(
+    xaxis  = list(title = "Card Count", color = "#c9d1d9", automargin = TRUE),
+    yaxis  = list(title = "",           color = "#c9d1d9", automargin = TRUE),
+    paper_bgcolor = "#1a1a2e",
+    plot_bgcolor  = "#1a1a2e",
+    font   = list(color = "#c9d1d9"),
+    margin = list(t = 40, b = 60, l = 120, r = 60)
+  )
+```
+
+# Price Analysis
+
+## Row {height="20%"}
+
+```{r}
+#| content: valuebox
+#| title: "Median Price"
+# Median is more meaningful than mean here because of extreme outliers
+list(icon = "align-center", color = "info",
+     value = paste0("$", med_price))
+```
+
+```{r}
+#| content: valuebox
+#| title: "Cards Under $1"
+list(icon = "tag", color = "success",
+     value    = format(n_cheap, big.mark = ","),
+     subtitle = paste0(round(n_cheap / total_cards * 100), "% of all cards"))
+```
+
+```{r}
+#| content: valuebox
+#| title: "Cards Over $10"
+list(icon = "gem", color = "warning",
+     value    = format(n_exp, big.mark = ","),
+     subtitle = paste0(round(n_exp / total_cards * 100), "% of all cards"))
+```
+
+```{r}
+#| content: valuebox
+#| title: "Cards Over $50"
+list(icon = "trophy-fill", color = "danger",
+     value    = format(n_rare, big.mark = ","),
+     subtitle = paste0(round(n_rare / total_cards * 100), "% of all cards"))
+```
+
+## Row {height="40%"}
+
+### Column {width="65%"}
+
+```{r}
+#| title: "Price Distribution (USD) — log scale shows the full spread"
+
+# A linear histogram is not useful here because ~80% of cards cost under $1,
+# which creates one massive bar at zero and nothing visible elsewhere.
+# Plotting on a log10 scale spreads the distribution out so we can see
+# how many cards fall into each price tier: cents, dollars, tens, hundreds.
+#
+# We log10-transform the price before plotting, then relabel the x-axis
+# tick marks as actual dollar amounts so the chart stays readable.
+
+price_log <- mtg_cheapest |>
+  filter(price > 0) |>                      # log(0) is undefined — drop free cards
+  mutate(log_price = log10(price))
+
+# Custom tick positions and their dollar-amount labels
+tick_vals   <- c(-2, -1, 0, 1, 2, 3)        # log10 values: 0.01, 0.10, 1, 10, 100, 1000
+tick_labels <- c("$0.01", "$0.10", "$1", "$10", "$100", "$1,000")
+
+plot_ly(price_log,
+  x    = ~log_price,
+  type = "histogram",
+  nbinsx = 80,
+  marker = list(
+    color = "#c8a032",
+    line  = list(color = "#1a1a2e", width = 0.5)
+  ),
+  # Show the original dollar price in the tooltip, not the log value
+  hovertemplate = "Price range: 10^%{x:.2f}<br>Count: %{y:,}<extra></extra>"
+) |>
+  layout(
+    xaxis = list(
+      title      = "Price (USD) — log scale",
+      color      = "#c9d1d9",
+      tickvals   = tick_vals,
+      ticktext   = tick_labels,
+      tickmode   = "array"
+    ),
+    yaxis = list(title = "Number of Cards", color = "#c9d1d9"),
+    paper_bgcolor = "#1a1a2e",
+    plot_bgcolor  = "#1a1a2e",
+    font = list(color = "#c9d1d9")
+  )
+```
+
+### Column {width="35%"}
+
+::: {.card}
+### Key Price Findings
+
+The chart uses a **log scale** on the x-axis — each step to the right is 10×
+more expensive. This reveals the true shape of the distribution, which is
+impossible to see on a linear scale because so many cards cost under \$1.
+
+The bell-shaped curve on a log scale tells us that card prices follow a
+**log-normal distribution** — most cards cluster around a central value, with
+tails of very cheap and very expensive cards on either side.
+
+**Summary statistics:**
+
+- **Mean price:** \$`r avg_price` — pulled up by expensive outliers
+- **Median price:** \$`r med_price` — a better measure of the "typical" card
+- **`r round(n_cheap / total_cards * 100)`%** of cards cost under \$1
+- Only **`r round(n_rare / total_cards * 100)`%** cost \$50 or more
+
+The large gap between mean and median confirms that a small number of
+extremely valuable cards skew the average significantly upward.
+:::
+
+## Row {height="40%"}
+
+### Column
+
+```{r}
+#| title: "Average Price by Rarity"
+
+# Remove "bonus" rarity — these are special promo cards that don't fit
+# the standard rarity hierarchy and would distort the comparison
+rarity_avg <- mtg_cheapest |>
+  filter(!rarity %in% c("bonus")) |>
+  group_by(rarity) |>
+  summarize(avg_price = round(mean(price, na.rm = TRUE), 2), .groups = "drop") |>
+  # Re-apply factor ordering so bars appear in gameplay order, not alphabetically
+  mutate(rarity = factor(
+    rarity,
+    levels = c("common", "uncommon", "rare", "mythic", "special")
+  ))
+
+plot_ly(rarity_avg,
+  x             = ~rarity,
+  y             = ~avg_price,
+  type          = "bar",
+  marker        = list(
+    color = rarity_pal[as.character(rarity_avg$rarity)],
+    line  = list(color = "#1a1a2e", width = 1)
+  ),
+  text          = ~paste0("$", avg_price),
+  textposition  = "outside",
+  cliponaxis    = FALSE,
+  hovertemplate = "<b>%{x}</b><br>Avg Price: $%{y:.2f}<extra></extra>"
+) |>
+  layout(
+    xaxis  = list(title = "Rarity",         color = "#c9d1d9", automargin = TRUE),
+    yaxis  = list(title = "Avg Price (USD)", color = "#c9d1d9", automargin = TRUE),
+    paper_bgcolor = "#1a1a2e",
+    plot_bgcolor  = "#1a1a2e",
+    font   = list(color = "#c9d1d9"),
+    margin = list(t = 40, b = 60, l = 60, r = 40)
+  )
+```
+
+### Column
+
+```{r}
+#| title: "Average Price by Card Type"
+
+# arrange() by avg_price before plotting so the horizontal bar chart
+# naturally sorts from cheapest (bottom) to most expensive (top)
+type_avg <- mtg_cheapest |>
+  group_by(card_type) |>
+  summarize(avg_price = round(mean(price, na.rm = TRUE), 2), .groups = "drop") |>
+  arrange(avg_price)
+
+plot_ly(type_avg,
+  x           = ~avg_price,
+  y           = ~reorder(card_type, avg_price),
+  type        = "bar",
+  orientation = "h",
+  marker      = list(
+    color = type_pal[as.character(type_avg$card_type)],
+    line  = list(color = "#1a1a2e", width = 1)
+  ),
+  text          = ~paste0("$", avg_price),
+  textposition  = "outside",
+  cliponaxis    = FALSE,
+  hovertemplate = "<b>%{y}</b><br>Avg Price: $%{x:.2f}<extra></extra>"
+) |>
+  layout(
+    xaxis  = list(title = "Avg Price (USD)", color = "#c9d1d9", automargin = TRUE),
+    yaxis  = list(title = "",                color = "#c9d1d9", automargin = TRUE),
+    paper_bgcolor = "#1a1a2e",
+    plot_bgcolor  = "#1a1a2e",
+    font   = list(color = "#c9d1d9"),
+    margin = list(t = 40, b = 60, l = 120, r = 60)
+  )
+```
+
+# Mana & Color
+
+## Row {height="15%"}
+
+::: {.card}
+### What is Converted Mana Cost (CMC)?
+
+Every MTG card requires **mana** to cast — the game's primary resource.
+**Converted Mana Cost (CMC)** is the total amount of mana required, regardless
+of color. A CMC of 1 is a cheap, fast card; a CMC of 7+ is a powerful late-game
+spell. Understanding CMC helps reveal the design philosophy behind the game:
+aggressive strategies rely on low-CMC cards, while control decks can afford
+higher costs. The scatter plot below lets you explore whether higher mana cost
+actually translates to higher market value.
+:::
+
+## Row {height="42%"}
+
+### Column {width="60%"}
+
+```{r}
+#| title: "CMC Distribution — How Complex Are Cards?"
+
+# Filter to CMC <= 16 to exclude a handful of extreme outlier cards
+# (e.g., some Un-set joke cards have absurdly high CMC values)
+cmc_counts <- mtg_cheapest |>
+  count(cmc) |>
+  filter(cmc <= 16)
+
+# dtick = 1 forces the x-axis to show every integer CMC value
+plot_ly(cmc_counts,
+  x             = ~cmc,
+  y             = ~n,
+  type          = "bar",
+  marker        = list(color = "#1e6eb5",
+                       line  = list(color = "#1a1a2e", width = 0.5)),
+  hovertemplate = "CMC %{x}<br>Cards: %{y:,}<extra></extra>"
+) |>
+  layout(
+    xaxis  = list(title = "Converted Mana Cost (CMC)", color = "#c9d1d9", dtick = 1),
+    yaxis  = list(title = "Number of Cards",            color = "#c9d1d9"),
+    paper_bgcolor = "#1a1a2e",
+    plot_bgcolor  = "#1a1a2e",
+    font   = list(color = "#c9d1d9")
+  )
+```
+
+### Column {width="40%"}
+
+```{r}
+#| title: "Average CMC by Card Type"
+
+# Lands have CMC 0 (they don't cost mana to play), which will anchor
+# the bottom of the chart — a useful reference point
+cmc_by_type <- mtg_cheapest |>
+  group_by(card_type) |>
+  summarize(avg_cmc = round(mean(cmc, na.rm = TRUE), 2), .groups = "drop") |>
+  arrange(avg_cmc)
+
+plot_ly(cmc_by_type,
+  x           = ~avg_cmc,
+  y           = ~reorder(card_type, avg_cmc),
+  type        = "bar",
+  orientation = "h",
+  marker      = list(
+    color = type_pal[as.character(cmc_by_type$card_type)],
+    line  = list(color = "#1a1a2e", width = 1)
+  ),
+  text          = ~avg_cmc,
+  textposition  = "outside",
+  cliponaxis    = FALSE,
+  hovertemplate = "<b>%{y}</b><br>Avg CMC: %{x:.2f}<extra></extra>"
+) |>
+  layout(
+    xaxis  = list(title = "Avg CMC", color = "#c9d1d9", automargin = TRUE),
+    yaxis  = list(title = "",        color = "#c9d1d9", automargin = TRUE),
+    paper_bgcolor = "#1a1a2e",
+    plot_bgcolor  = "#1a1a2e",
+    font   = list(color = "#c9d1d9"),
+    margin = list(t = 40, b = 60, l = 120, r = 60)
+  )
+```
+
+## Row {height="43%"}
+
+```{r}
+#| title: "Price vs. CMC — Hover over points for card details (sample of 5,000 cards, prices ≤ $100)"
+
+# Plotting all 30 000+ cards as scatter points would freeze the browser.
+# We take a random sample of 5 000 cards and cap price at $100 to focus
+# on the bulk of the data. set.seed() makes the sample reproducible.
+set.seed(42)
+scatter_data <- mtg_cheapest |>
+  filter(price <= 100) |>
+  slice_sample(n = min(5000, nrow(mtg_cheapest))) |>
+  # Re-apply factor so the legend displays colors in a consistent order
+  mutate(color_label = factor(
+    color_label,
+    levels = c("White", "Blue", "Black", "Red", "Green", "Colorless", "Multicolor")
+  ))
+
+# Color each point by the card's MTG color using mtg_pal.
+# hoverinfo = "text" suppresses plotly's default tooltip so only our
+# custom HTML string is shown when the user hovers.
+plot_ly(scatter_data,
+  x          = ~cmc,
+  y          = ~price,
+  color      = ~color_label,
+  colors     = mtg_pal,
+  type       = "scatter",
+  mode       = "markers",
+  marker     = list(opacity = 0.5, size = 5),
+  text       = ~paste0(
+    "<b>", name, "</b><br>",
+    "CMC: ",    cmc, "<br>",
+    "Price: $", round(price, 2), "<br>",
+    "Type: ",   card_type, "<br>",
+    "Rarity: ", rarity
+  ),
+  hoverinfo  = "text"
+) |>
+  layout(
+    xaxis  = list(title = "Converted Mana Cost", color = "#c9d1d9"),
+    yaxis  = list(title = "Price (USD)",          color = "#c9d1d9"),
+    legend = list(font  = list(color = "#c9d1d9")),
+    paper_bgcolor = "#1a1a2e",
+    plot_bgcolor  = "#1a1a2e",
+    font   = list(color = "#c9d1d9")
+  )
+```
+
+# Format Legality
+
+## Row {height="15%"}
+
+::: {.card}
+### MTG's Major Competitive Formats
+
+MTG has several **formats** that determine which cards are legal to play competitively.
+**Standard** rotates yearly, only allowing cards from recent sets — keeping the
+meta fresh but making cards obsolete. **Modern** allows cards from 2003 onward,
+creating a much larger card pool. **Commander** is the most popular casual format,
+where nearly every non-banned card is legal and players build 100-card decks around
+a legendary creature. Because Standard bans more cards, legal cards there tend to
+be more recently printed and often more expensive due to active demand.
+:::
+
+## Row {height="42%"}
+
+### Column
+
+```{r}
+#| title: "Standard Legality"
+
+# Count how many cards fall into each legality status for Standard.
+# The four possible values are: legal, not_legal, banned, restricted.
+std <- mtg_cheapest |>
+  count(legalities.standard) |>
+  rename(status = legalities.standard)
+
+plot_ly(std,
+  labels        = ~status,
+  values        = ~n,
+  type          = "pie",
+  marker        = list(
+    colors = c("#2a7a45", "#d44239", "#8b949e", "#c8a032"),
+    line   = list(color = "#1a1a2e", width = 2)
+  ),
+  textinfo      = "label+percent",
+  hovertemplate = "<b>%{label}</b><br>Cards: %{value:,}<br>%{percent}<extra></extra>"
+) |>
+  layout(
+    paper_bgcolor = "#1a1a2e",
+    font   = list(color = "#c9d1d9"),
+    legend = list(font = list(color = "#c9d1d9"))
+  )
+```
+
+### Column
+
+```{r}
+#| title: "Modern Legality"
+mod <- mtg_cheapest |>
+  count(legalities.modern) |>
+  rename(status = legalities.modern)
+
+plot_ly(mod,
+  labels        = ~status,
+  values        = ~n,
+  type          = "pie",
+  marker        = list(
+    colors = c("#2a7a45", "#d44239", "#8b949e", "#c8a032"),
+    line   = list(color = "#1a1a2e", width = 2)
+  ),
+  textinfo      = "label+percent",
+  hovertemplate = "<b>%{label}</b><br>Cards: %{value:,}<br>%{percent}<extra></extra>"
+) |>
+  layout(
+    paper_bgcolor = "#1a1a2e",
+    font   = list(color = "#c9d1d9"),
+    legend = list(font = list(color = "#c9d1d9"))
+  )
+```
+
+### Column
+
+```{r}
+#| title: "Commander Legality"
+cmd <- mtg_cheapest |>
+  count(legalities.commander) |>
+  rename(status = legalities.commander)
+
+plot_ly(cmd,
+  labels        = ~status,
+  values        = ~n,
+  type          = "pie",
+  marker        = list(
+    colors = c("#2a7a45", "#d44239", "#8b949e", "#c8a032"),
+    line   = list(color = "#1a1a2e", width = 2)
+  ),
+  textinfo      = "label+percent",
+  hovertemplate = "<b>%{label}</b><br>Cards: %{value:,}<br>%{percent}<extra></extra>"
+) |>
+  layout(
+    paper_bgcolor = "#1a1a2e",
+    font   = list(color = "#c9d1d9"),
+    legend = list(font = list(color = "#c9d1d9"))
+  )
+```
+
+## Row {height="43%"}
+
+### Column {width="50%"}
+
+```{r}
+#| title: "Average Price of Legal Cards by Format"
+
+# Stack all three formats into one long data frame so we can group_by format.
+# We only keep rows where status == "legal" to compare prices of
+# playable cards rather than banned/not-legal ones.
+legality_price <- bind_rows(
+  mtg_cheapest |> mutate(format = "Standard",  status = legalities.standard),
+  mtg_cheapest |> mutate(format = "Modern",    status = legalities.modern),
+  mtg_cheapest |> mutate(format = "Commander", status = legalities.commander)
+) |>
+  filter(status == "legal") |>
+  group_by(format) |>
+  summarize(
+    avg_price = round(mean(price, na.rm = TRUE), 2),
+    n_cards   = n(),
+    .groups   = "drop"
+  )
+
+plot_ly(legality_price,
+  x             = ~format,
+  y             = ~avg_price,
+  type          = "bar",
+  marker        = list(
+    color = c("#2a7a45", "#1e6eb5", "#c8a032"),
+    line  = list(color = "#1a1a2e", width = 1)
+  ),
+  # Show both the avg price and card count in the bar label
+  text          = ~paste0("$", avg_price, " (", format(n_cards, big.mark = ","), " cards)"),
+  textposition  = "outside",
+  cliponaxis    = FALSE,
+  hovertemplate = "<b>%{x}</b><br>Avg Price: $%{y:.2f}<extra></extra>"
+) |>
+  layout(
+    xaxis  = list(title = "Format",          color = "#c9d1d9", automargin = TRUE),
+    yaxis  = list(title = "Avg Price (USD)", color = "#c9d1d9", automargin = TRUE),
+    paper_bgcolor = "#1a1a2e",
+    plot_bgcolor  = "#1a1a2e",
+    font   = list(color = "#c9d1d9"),
+    margin = list(t = 60, b = 60, l = 60, r = 40)
+  )
+```
+
+### Column {width="50%"}
+
+::: {.card}
+### What the Legality Data Shows
+
+```{r}
+# Compute legality percentages inline so they can be referenced in the
+# markdown text below using `r std_legal_pct` etc.
+std_legal_pct <- round(
+  sum(mtg_cheapest$legalities.standard  == "legal") / total_cards * 100
+)
+mod_legal_pct <- round(
+  sum(mtg_cheapest$legalities.modern    == "legal") / total_cards * 100
+)
+cmd_legal_pct <- round(
+  sum(mtg_cheapest$legalities.commander == "legal") / total_cards * 100
+)
+```
+
+- Only **`r std_legal_pct`%** of all cards are Standard-legal, reflecting
+  how aggressively that format rotates old sets out.
+- **`r mod_legal_pct`%** are Modern-legal — a much larger pool drawing from
+  over 20 years of card printings.
+- **`r cmd_legal_pct`%** are Commander-legal, making it the most inclusive
+  format by far.
+
+Standard-legal cards command the **highest average prices** because they are
+in active competitive demand. Once a card rotates out of Standard, its price
+typically drops unless it sees play in Modern or Commander.
+
+This shows that **format legality is one of the strongest drivers of card
+value** — not just rarity alone.
+:::
+
+# Summary & Resources
+
+## Row {height="100%"}
+
+### Column {width="60%"}
+
+::: {.card}
+### Key Findings
+
+This dashboard analyzed **`r format(total_cards, big.mark=",")`** unique Magic:
+The Gathering cards sourced from the Scryfall database. Here is a summary of
+what we found:
+
+**Price**
+
+- Card prices are extremely right-skewed. The median price is only
+  \$`r med_price`, but the mean is \$`r avg_price` due to a small number of
+  very expensive cards pulling the average up.
+- `r round(n_cheap / total_cards * 100)`% of all cards cost under \$1, while
+  just `r round(n_rare / total_cards * 100)`% cost \$50 or more.
+- **Mythic rarity** cards have the highest average price, followed by Rare.
+  Common cards are nearly worthless on the secondary market.
+- **Planeswalkers** have the highest average price by card type, likely because
+  they are almost always printed at Mythic rarity.
+
+**Mana Cost & Complexity**
+
+- Most cards have a CMC between 1 and 5, with CMC 2–3 being the most common
+  range. This reflects the game's design principle of rewarding efficient,
+  lower-cost cards.
+- Lands have a CMC of 0 (they do not require mana to play), while Sorceries
+  and Creatures tend to have higher average CMC than Instants.
+- There is **no strong linear relationship** between CMC and price — a
+  high-mana-cost card is not necessarily more valuable.
+
+**Format Legality**
+
+- Standard is the most restrictive format, with only
+  `r round(sum(mtg_cheapest$legalities.standard == "legal") / total_cards * 100)`%
+  of cards legal.
+- Standard-legal cards carry the highest average price, confirming that
+  **competitive demand drives value more than rarity alone**.
+- Commander is the most inclusive format and the most popular casual format,
+  accepting `r round(sum(mtg_cheapest$legalities.commander == "legal") / total_cards * 100)`%
+  of all cards.
+:::
+
+### Column {width="40%"}
+
+::: {.card}
+### Further Reading & Resources
+
+**Data Source**
+
+- [Scryfall](https://scryfall.com) — The database powering this dashboard.
+  Search any card, browse sets, and explore advanced filters.
+- [Scryfall API Documentation](https://scryfall.com/docs/api) — Full
+  reference for the bulk data API used to load this dataset.
+
+**Learning More About MTG**
+
+- [MTG Wiki — Card Types](https://mtg.fandom.com/wiki/Card_type) — Detailed
+  explanation of every card type and subtype.
+- [MTG Wiki — Converted Mana Cost](https://mtg.fandom.com/wiki/Mana_value) —
+  How CMC (now called "Mana Value") is calculated.
+- [MTGGoldfish](https://www.mtggoldfish.com) — In-depth price tracking,
+  format meta analysis, and deck building tools.
+
+**R & Data Visualization**
+
+- [Quarto Dashboard Documentation](https://quarto.org/docs/dashboards/) —
+  How this dashboard was built.
+- [plotly for R](https://plotly.com/r/) — Reference for all interactive chart
+  types used on this dashboard.
+- [DT Package](https://rstudio.github.io/DT/) — The interactive table library
+  used in the Card Browser.
+- [crosstalk Package](https://rstudio.github.io/crosstalk/) — How the Card
+  Browser filters are linked to the table without Shiny.
+:::
+
+# Card Browser
+
+## Row
+
+```{r}
+#| title: "Browse Cards — Filter by Color, Type, Rarity, or Format (top 2,000 by price)"
+
+# Select and rename only the columns useful to a browser/viewer.
+# We cap at 2 000 rows (sorted by price descending) to keep the page
+# responsive — rendering all 30 000+ rows at once in the browser is too slow.
+browser_data <- mtg_cheapest |>
+  select(
+    Name        = name,
+    `Mana Cost` = mana_cost,
+    CMC         = cmc,
+    Type        = card_type,
+    Color       = color_combo,   # Exact combo e.g. "Blue/Black" not just "Multicolor"
+    Rarity      = rarity,
+    Set         = set,
+    `Price USD` = price,
+    Standard    = legalities.standard,
+    Modern      = legalities.modern,
+    Commander   = legalities.commander
+  ) |>
+  arrange(desc(`Price USD`)) |>
+  slice_head(n = 2000)
+
+# SharedData links the filter widgets and the DT table client-side.
+# When the user picks a value in a filter_select, crosstalk tells the
+# table to hide rows that don't match — no server or Shiny required.
+shared <- SharedData$new(browser_data)
+
+# Render all six dropdowns as a single HTML output inside one flex container.
+# They MUST be in the same code chunk as the datatable() call so that
+# crosstalk can register them all against the same SharedData object.
+htmltools::tags$div(
+  class = "filter-row",
+  htmltools::tags$div(class = "filter-item",
+    filter_select("ct_color",     "Color",     shared, ~Color,     multiple = TRUE)),
+  htmltools::tags$div(class = "filter-item",
+    filter_select("ct_type",      "Type",      shared, ~Type,      multiple = TRUE)),
+  htmltools::tags$div(class = "filter-item",
+    filter_select("ct_rarity",    "Rarity",    shared, ~Rarity,    multiple = TRUE)),
+  htmltools::tags$div(class = "filter-item",
+    filter_select("ct_standard",  "Standard",  shared, ~Standard,  multiple = TRUE)),
+  htmltools::tags$div(class = "filter-item",
+    filter_select("ct_modern",    "Modern",    shared, ~Modern,    multiple = TRUE)),
+  htmltools::tags$div(class = "filter-item",
+    filter_select("ct_commander", "Commander", shared, ~Commander, multiple = TRUE))
+)
+
+# Render the table, also bound to shared so it reacts to the filters above.
+# formatCurrency() adds a "$" prefix and two decimal places to the price column.
+datatable(
+  shared,
+  rownames = FALSE,
+  class    = "stripe hover compact",
+  options  = list(
+    pageLength = 20,
+    scrollX    = TRUE,
+    dom        = "frtip"   # f=search, r=processing, t=table, i=info, p=pagination
+  )
+) |>
+  formatCurrency("Price USD", currency = "$", digits = 2)
+```
